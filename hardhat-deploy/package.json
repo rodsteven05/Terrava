@@ -1,0 +1,13 @@
+{
+  "name": "landchain-hardhat",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "deploy": "npx hardhat run scripts/deploy.js --network sepolia"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^17.4.2",
+    "hardhat": "^2.28.6"
+  }
+}
