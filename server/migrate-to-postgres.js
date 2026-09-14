@@ -3,17 +3,17 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const { Sequelize } = require('sequelize');
 
-const sqlitePath = path.join(__dirname, 'landchain.sqlite');
+const sqlitePath = path.join(__dirname, 'terrava.sqlite');
 const sqliteDb = new sqlite3.Database(sqlitePath);
 
 const host = process.env.DB_HOST || 'localhost';
 const port = process.env.DB_PORT || 5432;
 const username = process.env.DB_USER || 'postgres';
 const password = process.env.DB_PASSWORD || 'password';
-const database = process.env.DB_NAME || 'landchain';
+const database = process.env.DB_NAME || 'terrava';
 
 const jsonColumns = {
-  land_listings: ['polygon_geojson', 'photos', 'utilities'],
+  land_listings: ['polygon_geojson', 'photos', 'photo_geotags', 'utilities'],
   notifications: ['data']
 };
 

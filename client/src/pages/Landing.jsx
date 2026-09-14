@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   MapPin, Shield, BarChart3, Search, ArrowRight, CheckCircle,
   Map, Users, Building2, Phone, Mail, ChevronDown, Landmark, Layers, Clock
@@ -56,12 +56,12 @@ const steps = [
 ]
 
 const branches = [
-  { name: 'Main Branch — Tagum City', address: 'Tagum City, Davao del Norte', phone: '+63 912 000 0001', email: 'mainbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
-  { name: '2nd Branch', address: 'Panabo City, Davao del Norte', phone: '+63 912 000 0002', email: '2ndbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
-  { name: '3rd Branch', address: 'Sto. Tomas, Davao del Norte', phone: '+63 912 000 0003', email: '3rdbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
-  { name: '4th Branch', address: 'Davao City, Davao del Sur', phone: '+63 912 000 0004', email: '4thbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
-  { name: '5th Branch', address: 'Mati City, Davao Oriental', phone: '+63 912 000 0005', email: '5thbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
-  { name: '6th Branch', address: 'Digos City, Davao del Sur', phone: '+63 912 000 0006', email: '6thbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
+  { name: 'Main Branch — Tagum City', branchKey: 'Main Tagum', address: 'Tagum City, Davao del Norte', phone: '+63 912 000 0001', email: 'mainbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
+  { name: '2nd Branch', branchKey: 'Panabo', address: 'Panabo City, Davao del Norte', phone: '+63 912 000 0002', email: '2ndbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
+  { name: '3rd Branch', branchKey: 'Sto. Tomas', address: 'Sto. Tomas, Davao del Norte', phone: '+63 912 000 0003', email: '3rdbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
+  { name: '4th Branch', branchKey: 'Davao City', address: 'Davao City, Davao del Sur', phone: '+63 912 000 0004', email: '4thbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
+  { name: '5th Branch', branchKey: 'Mati City', address: 'Mati City, Davao Oriental', phone: '+63 912 000 0005', email: '5thbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
+  { name: '6th Branch', branchKey: 'Digos City', address: 'Digos City, Davao del Sur', phone: '+63 912 000 0006', email: '6thbranch@terrava.ph', hours: 'Monday - Saturday: 8:00 AM - 5:00 PM' },
 ]
 
 const benefits = [
@@ -74,8 +74,14 @@ const benefits = [
 ]
 
 export default function Landing() {
+  const navigate = useNavigate()
+
   const scrollTo = (id) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const viewBranchOnMap = (branchKey) => {
+    navigate(`/map?branch=${encodeURIComponent(branchKey)}`)
   }
 
   return (
@@ -258,13 +264,17 @@ export default function Landing() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {branches.map((b, i) => (
-            <div key={i} className="bg-white border border-gray-100 rounded-2xl p-6 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200">
+            <button
+              key={i}
+              onClick={() => viewBranchOnMap(b.branchKey)}
+              className="text-left bg-white border border-gray-100 rounded-2xl p-6 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200 group"
+            >
               <div className="flex items-start gap-3 mb-4">
-                <div className="bg-brand-100 p-2 rounded-lg flex-shrink-0">
-                  <Building2 className="w-5 h-5 text-brand-700" />
+                <div className="bg-brand-100 p-2 rounded-lg flex-shrink-0 group-hover:bg-brand-600 transition">
+                  <Building2 className="w-5 h-5 text-brand-700 group-hover:text-white transition" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900">{b.name}</h3>
+                  <h3 className="font-bold text-gray-900 group-hover:text-brand-700 transition">{b.name}</h3>
                   <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
                     <MapPin className="w-3.5 h-3.5 flex-shrink-0" /> {b.address}
                   </p>
@@ -275,7 +285,7 @@ export default function Landing() {
                 <p className="flex items-center gap-2"><Mail className="w-4 h-4 text-brand-600 flex-shrink-0" /> {b.email}</p>
                 <p className="flex items-start gap-2"><Clock className="w-4 h-4 text-brand-600 flex-shrink-0 mt-0.5" /> {b.hours}</p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </section>

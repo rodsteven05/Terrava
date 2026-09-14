@@ -9,6 +9,12 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  if (config.url?.startsWith('/blockchain')) {
+    const ledgerToken = sessionStorage.getItem('blockchainLedgerToken')
+    if (ledgerToken) {
+      config.headers['X-Ledger-Authorization'] = `Bearer ${ledgerToken}`
+    }
+  }
   return config
 })
 

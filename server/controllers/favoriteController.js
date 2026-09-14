@@ -10,7 +10,7 @@ exports.getFavorites = async (req, res) => {
           as: 'listing',
           where: { archived: false },
           required: true,
-          include: [{ model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone'] }]
+          include: [{ model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'photo_url'] }]
         }
       ],
       order: [['created_at', 'DESC']]

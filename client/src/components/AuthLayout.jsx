@@ -46,15 +46,16 @@ export default function AuthLayout({ children, mode = 'login' }) {
 
   return (
 
-    <div className="min-h-screen flex flex-col lg:flex-row items-center justify-center gap-10 p-20">
+    <div
+      className="min-h-screen flex flex-col lg:flex-row items-center justify-center gap-10 p-20 bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: "url('/uploads/backgroun%20picture.jpg')" }}
+    >
 
       {/* Left branding card */}
 
       <div
 
-        className="w-full lg:w-[40%] text-white p-8 rounded-3xl shadow-2xl flex flex-col lg:min-h-[85vh] lg:max-h-[85vh]"
-
-        style={{ background: 'linear-gradient(135deg, #064e3b 0%, #059669 100%)' }}
+        className="w-full lg:w-[40%] p-8 rounded-3xl flex flex-col lg:min-h-[85vh] lg:max-h-[85vh]"
 
       >
 
@@ -64,9 +65,9 @@ export default function AuthLayout({ children, mode = 'login' }) {
 
           <div className="absolute top-0 right-0 hidden md:block">
 
-            <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-sm border border-white/25 rounded-full px-3 py-1.5 text-xs font-medium">
+            <div className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5)' }}>
 
-              <ShieldCheck className="w-3.5 h-3.5" />
+              <ShieldCheck className="w-3.5 h-3.5 drop-shadow-lg" />
 
               Secured
 
@@ -84,15 +85,15 @@ export default function AuthLayout({ children, mode = 'login' }) {
 
               alt="Terrava"
 
-              className="w-11 h-11 rounded-xl bg-white/20 p-1.5 object-contain"
+              className="w-11 h-11 rounded-xl p-1.5 object-contain bg-white/90 shadow-lg"
 
             />
 
             <div>
 
-              <span className="text-2xl font-extrabold leading-none">Terrava</span>
+              <span className="text-2xl font-extrabold leading-none text-white" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5)' }}>Terrava</span>
 
-              <p className="text-white/70 text-xs mt-0.5">Land Selling System</p>
+              <p className="text-white text-xs mt-0.5" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Land Selling System</p>
 
             </div>
 
@@ -100,14 +101,14 @@ export default function AuthLayout({ children, mode = 'login' }) {
 
 
 
-          <div className="inline-flex items-center justify-center gap-1.5 bg-white/10 border border-white/20 rounded-full w-full max-w-[135px] py-1.5 text-xs font-medium mb-6">
-  <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shrink-0" />
+          <div className="inline-flex items-center justify-center gap-1.5 rounded-full w-full max-w-[135px] py-1.5 text-xs font-medium mb-6 text-white" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 shadow-lg" />
   <span className="truncate">Land Selling Portal</span>
 </div>
 
 
 
-          <h2 className="text-3xl md:text-4xl font-extrabold leading-tight mb-4">
+          <h2 className="text-3xl md:text-4xl font-extrabold leading-tight mb-4 text-white" style={{ textShadow: '0 2px 6px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.6)' }}>
 
             {isLogin ? (
 
@@ -121,7 +122,7 @@ export default function AuthLayout({ children, mode = 'login' }) {
 
           </h2>
 
-          <p className="text-white/70 text-base leading-relaxed mb-8">
+          <p className="text-white text-base leading-relaxed mb-8" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5)' }}>
 
             {isLogin
 
@@ -137,7 +138,7 @@ export default function AuthLayout({ children, mode = 'login' }) {
 
 
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
 
             {features.map((f) => (
 
@@ -145,15 +146,15 @@ export default function AuthLayout({ children, mode = 'login' }) {
 
                 key={f.title}
 
-                className={`bg-white/10 border border-white/15 rounded-xl p-4 ${f.title === 'Blockchain Secured' ? 'sm:col-span-2' : ''}`}
+                className="rounded-lg p-3"
 
               >
 
-                <f.icon className="w-5 h-5 mb-2 text-emerald-200" />
+                <f.icon className="w-4 h-4 mb-1.5 text-emerald-300 drop-shadow-lg" />
 
-                <h3 className="font-semibold text-sm mb-1">{f.title}</h3>
+                <h3 className="font-semibold text-xs mb-0.5 text-white" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>{f.title}</h3>
 
-                <p className="text-white/60 text-xs leading-relaxed">{f.desc}</p>
+                <p className="text-white text-[10px] leading-relaxed" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>{f.desc}</p>
 
               </div>
 
@@ -165,7 +166,7 @@ export default function AuthLayout({ children, mode = 'login' }) {
 
 
 
-        <p className="text-white/30 text-xs mt-8">© 2025 Terrava. All rights reserved.</p>
+        <p className="text-white text-xs mt-8" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>© 2025 Terrava. All rights reserved.</p>
 
       </div>
 
@@ -173,7 +174,7 @@ export default function AuthLayout({ children, mode = 'login' }) {
 
       {/* Right form card */}
 
-      <div className="w-full lg:w-[40%] bg-white rounded-3xl shadow-2xl p-8 lg:min-h-[85vh] lg:max-h-[85vh] lg:overflow-y-auto">
+      <div className="w-full lg:w-[40%] bg-white/80 backdrop-blur-md rounded-3xl shadow-2xl p-8 lg:min-h-[85vh] lg:max-h-[85vh] lg:overflow-y-auto">
 
         {children}
 

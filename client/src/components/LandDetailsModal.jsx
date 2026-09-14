@@ -8,8 +8,10 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Plus
 } from 'lucide-react'
+import MapView from './MapView.jsx'
 import PesoIcon from './PesoIcon.jsx'
 
 const ZONING_OPTIONS = ['Residential', 'Commercial', 'Agricultural', 'Industrial']
@@ -20,7 +22,6 @@ const TITLE_STATUS_OPTIONS = [
   'Under Process'
 ]
 
-const DOWN_PAYMENT_OPTIONS = ['10%', '20%', '30%', '50%']
 
 const TERRAIN_OPTIONS = ['Flat / Level', 'Sloped', 'Elevated']
 
@@ -43,7 +44,7 @@ const Label = ({ children, required }) => (
   </label>
 )
 
-const Input = ({ type = 'text', value, onChange, placeholder, required, min, step, disabled }) => (
+const Input = ({ type = 'text', value, onChange, placeholder, required, min, max, step, disabled }) => (
   <input
     type={type}
     value={value}
@@ -51,6 +52,7 @@ const Input = ({ type = 'text', value, onChange, placeholder, required, min, ste
     placeholder={placeholder}
     required={required}
     min={min}
+    max={max}
     step={step}
     disabled={disabled}
     className={`w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition ${
@@ -101,6 +103,7 @@ export default function LandDetailsModal({ isOpen, onClose, initialData = {}, ex
     total_area_sqm: '',
     latitude: '',
     longitude: '',
+    polygon_points: [],
     lot_block_number: '',
     zoning_classification: '',
     land_title_status: '',
@@ -113,6 +116,8 @@ export default function LandDetailsModal({ isOpen, onClose, initialData = {}, ex
     in_house_max_term_years: '',
     in_house_interest_rate_pct: '',
     bank_government_loan_enabled: false,
+    penalty_rate_pct: '5.00',
+    monthly_payment_amount: '',
     terrain_topography: '',
     utilities: {
       electricity_ready: false,
@@ -123,9 +128,14 @@ export default function LandDetailsModal({ isOpen, onClose, initialData = {}, ex
 
   useEffect(() => {
     if (isOpen && initialData) {
+      const coords = initialData.polygon_geojson?.coordinates?.[0] || []
+      const points = coords.length > 1
+        ? coords.slice(0, -1).map(([lng, lat]) => [lat, lng])
+        : coords.map(([lng, lat]) => [lat, lng])
       setForm((prev) => ({
         ...prev,
         ...initialData,
+        polygon_points: initialData.polygon_points || points,
         utilities: {
           electricity_ready: false,
           water_ready: false,
@@ -138,6 +148,38 @@ export default function LandDetailsModal({ isOpen, onClose, initialData = {}, ex
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const addPolygonPoint = () => {
+    if (readOnly) return
+    const lat = parseFloat(form.latitude)
+    const lng = parseFloat(form.longitude)
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      alert('Please enter a valid latitude and longitude first.')
+      return
+    }
+    setForm((prev) => ({
+      ...prev,
+      polygon_points: [...prev.polygon_points, [lat, lng]],
+      latitude: '',
+      longitude: ''
+    }))
+  }
+
+  const removePolygonPoint = (index) => {
+    if (readOnly) return
+    setForm((prev) => ({
+      ...prev,
+      polygon_points: prev.polygon_points.filter((_, i) => i !== index)
+    }))
+  }
+
+  const addMapPolygonPoint = ([lat, lng]) => {
+    if (readOnly) return
+    setForm((prev) => ({
+      ...prev,
+      polygon_points: [...prev.polygon_points, [lat, lng]]
+    }))
   }
 
   const [existing, setExisting] = useState(existingPhotos)
@@ -301,6 +343,67 @@ export default function LandDetailsModal({ isOpen, onClose, initialData = {}, ex
                   />
                 </div>
               </div>
+
+              {/* GIS Boundary Map */}
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <Label>GIS Boundary Map</Label>
+                  <span className="text-xs font-medium text-emerald-700">{form.polygon_points.length} point{form.polygon_points.length === 1 ? '' : 's'} added</span>
+                </div>
+                {!readOnly && (
+                  <>
+                    <p className="text-xs text-slate-500 mb-3">Click anywhere on the map to drop a boundary point, or type lat/lng above and press Add Point.</p>
+                    <div className="flex items-center gap-2 mb-3">
+                      <button
+                        type="button"
+                        onClick={addPolygonPoint}
+                        disabled={!form.latitude || !form.longitude}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Point
+                      </button>
+                      {form.polygon_points.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, polygon_points: [], latitude: '', longitude: '' }))}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-50 transition"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+                    {form.polygon_points.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {form.polygon_points.map(([lat, lng], idx) => (
+                          <div
+                            key={idx}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-800 rounded-full text-xs font-medium"
+                          >
+                            P{idx + 1}: {Number(lat).toFixed(5)}, {Number(lng).toFixed(5)}
+                            <button
+                              type="button"
+                              onClick={() => removePolygonPoint(idx)}
+                              className="hover:text-red-600"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+                {readOnly && form.polygon_points.length === 0 && (
+                  <p className="text-xs text-slate-500 mb-3">No boundary polygon has been set for this listing.</p>
+                )}
+                <MapView
+                  listings={[]}
+                  height="280px"
+                  boundaryPoints={form.polygon_points}
+                  onAddBoundaryPoint={readOnly ? null : addMapPolygonPoint}
+                  scrollWheelZoom={false}
+                />
+              </div>
             </div>
           </Section>
 
@@ -433,18 +536,153 @@ export default function LandDetailsModal({ isOpen, onClose, initialData = {}, ex
                   />
                 </div>
               </div>
-              <div>
-                <Label required>Minimum Down Payment Percentage</Label>
-                <Select
-                  value={form.minimum_down_payment_pct}
-                  onChange={(e) => updateField('minimum_down_payment_pct', e.target.value)}
-                  options={DOWN_PAYMENT_OPTIONS}
-                  placeholder="Select down payment %"
-                  disabled={readOnly}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label required>Minimum Down Payment Percentage</Label>
+                  <Input
+                    type="number"
+                    value={form.minimum_down_payment_pct}
+                    onChange={(e) => updateField('minimum_down_payment_pct', e.target.value)}
+                    placeholder="1–40"
+                    required
+                    min={1}
+                    max={40}
+                    step={1}
+                    disabled={readOnly}
+                  />
+                </div>
+                <div>
+                  <Label required>Overdue Penalty Rate (%)</Label>
+                  <Input
+                    type="number"
+                    value={form.penalty_rate_pct}
+                    onChange={(e) => updateField('penalty_rate_pct', e.target.value)}
+                    placeholder="2–5"
+                    required
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    disabled={readOnly}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label required>Monthly Payment Amount (PHP)</Label>
+                  <Input
+                    type="number"
+                    value={form.monthly_payment_amount}
+                    onChange={(e) => updateField('monthly_payment_amount', e.target.value)}
+                    placeholder="e.g. 15000"
+                    required
+                    min={0}
+                    step={0.01}
+                    disabled={readOnly}
+                  />
+                </div>
+                <div>
+                  <Label>Computed Penalty per Missed Month</Label>
+                  <div className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-800 bg-slate-50">
+                    ₱{Number((Number(form.monthly_payment_amount || 0) * (Number(form.penalty_rate_pct || 0) / 100)).toFixed(2)).toLocaleString()}
+                  </div>
+                </div>
               </div>
 
-              <p className="text-xs text-slate-500 pt-2">Financing options and utility details are managed by the listing owner.</p>
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                <h4 className="text-sm font-semibold text-slate-800 mb-3">Financing Options</h4>
+                <div className="space-y-4">
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={form.cash_term_enabled}
+                      onChange={(e) => updateField('cash_term_enabled', e.target.checked)}
+                      disabled={readOnly}
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm text-slate-700">Cash term enabled</span>
+                  </label>
+                  {form.cash_term_enabled && (
+                    <div>
+                      <Label>Cash Term Discount (%)</Label>
+                      <Input
+                        type="number"
+                        value={form.cash_term_discount_pct}
+                        onChange={(e) => updateField('cash_term_discount_pct', e.target.value)}
+                        placeholder="e.g. 10"
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        disabled={readOnly}
+                      />
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={form.in_house_financing_enabled}
+                      onChange={(e) => updateField('in_house_financing_enabled', e.target.checked)}
+                      disabled={readOnly}
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm text-slate-700">In-house financing enabled</span>
+                  </label>
+                  {form.in_house_financing_enabled && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label required>Max Term (Years)</Label>
+                        <Input
+                          type="number"
+                          value={form.in_house_max_term_years}
+                          onChange={(e) => updateField('in_house_max_term_years', e.target.value)}
+                          placeholder="e.g. 5"
+                          required={form.in_house_financing_enabled}
+                          min={1}
+                          max={30}
+                          step={1}
+                          disabled={readOnly}
+                        />
+                      </div>
+                      <div>
+                        <Label>Interest Rate (%)</Label>
+                        <Input
+                          type="number"
+                          value={form.in_house_interest_rate_pct}
+                          onChange={(e) => updateField('in_house_interest_rate_pct', e.target.value)}
+                          placeholder="e.g. 10"
+                          min={0}
+                          max={100}
+                          step={0.01}
+                          disabled={readOnly}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={form.bank_government_loan_enabled}
+                      onChange={(e) => updateField('bank_government_loan_enabled', e.target.checked)}
+                      disabled={readOnly}
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm text-slate-700">Bank / Government loan enabled</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-800">
+                <p className="font-semibold mb-1">Payment Reminder Policy</p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>Buyers receive a friendly reminder during the 30-day grace period.</li>
+                  <li>If unpaid after 30 days (31–60 days), a <strong>{form.penalty_rate_pct || 5}% penalty</strong> is added to the monthly dues.</li>
+                  <li>61–90 days delinquent: demand letter sent and account flagged for admin review.</li>
+                  <li>90+ days overdue: contract is cancelled and the lot becomes available again.</li>
+                </ul>
+              </div>
+
+              <p className="text-xs text-slate-500 pt-2">Financing options, penalty rate, and utility details are managed by the listing owner.</p>
             </div>
           </Section>
 

@@ -35,8 +35,8 @@ exports.getChain = async (req, res) => {
         required: false,
         include: [
           { model: db.LandListing, as: 'listing', attributes: ['id', 'title', 'location_text'] },
-          { model: db.User, as: 'buyer', attributes: ['id', 'full_name', 'email'] },
-          { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email'] }
+          { model: db.User, as: 'buyer', attributes: ['id', 'full_name', 'email', 'photo_url'] },
+          { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'photo_url'] }
         ]
       }]
     });

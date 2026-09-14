@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import api from '../api/api.js'
 import Spinner from '../components/Spinner.jsx'
 import EmptyState from '../components/EmptyState.jsx'
+import Avatar from '../components/Avatar.jsx'
+import useAutoRefresh from '../hooks/useAutoRefresh.js'
 import { Users, Search, Phone, Mail, Calendar, Eye, X, User, MapPinned, Contact, IdCard } from 'lucide-react'
 
 export default function RegisteredUsers() {
@@ -10,12 +12,14 @@ export default function RegisteredUsers() {
   const [search, setSearch] = useState('')
   const [selectedBuyer, setSelectedBuyer] = useState(null)
 
-  useEffect(() => {
+  const fetchBuyers = useCallback(() =>
     api.get('/admin/buyers')
       .then((res) => setBuyers(res.data))
       .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => setLoading(false)),
+  [])
+
+  useAutoRefresh(fetchBuyers, [fetchBuyers], 30000)
 
   const filtered = buyers.filter((b) => {
     const q = search.toLowerCase()
@@ -77,9 +81,6 @@ export default function RegisteredUsers() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filtered.map((b) => {
-            const initials = b.full_name
-              ? b.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
-              : 'U'
             const joinedDate = b.created_at
               ? new Date(b.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
               : '—'
@@ -89,9 +90,14 @@ export default function RegisteredUsers() {
                 className="group bg-white rounded-2xl shadow-card border border-gray-100 p-5 hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200"
               >
                 <div className="flex items-start gap-4 mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-brand-600 to-brand-800 rounded-2xl flex items-center justify-center text-white text-lg font-bold flex-shrink-0 shadow-md">
-                    {initials}
-                  </div>
+                  <Avatar
+                    url={b.photo_url}
+                    name={b.full_name}
+                    sizeClass="w-14 h-14"
+                    textClass="text-lg"
+                    fallbackClass="bg-gradient-to-br from-brand-600 to-brand-800"
+                    className="rounded-2xl shadow-md"
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-gray-900 text-lg truncate">{b.full_name}</p>
                     <span className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 text-xs font-semibold px-2.5 py-1 rounded-full capitalize mt-1">
@@ -155,11 +161,14 @@ export default function RegisteredUsers() {
 
             <div className="p-6 space-y-5">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-brand-600 to-brand-800 rounded-2xl flex items-center justify-center text-white text-xl font-bold flex-shrink-0 shadow-md">
-                  {selectedBuyer.full_name
-                    ? selectedBuyer.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
-                    : 'U'}
-                </div>
+                <Avatar
+                  url={selectedBuyer.photo_url}
+                  name={selectedBuyer.full_name}
+                  sizeClass="w-16 h-16"
+                  textClass="text-xl"
+                  fallbackClass="bg-gradient-to-br from-brand-600 to-brand-800"
+                  className="rounded-2xl shadow-md"
+                />
                 <div>
                   <p className="font-bold text-gray-900 text-lg">{selectedBuyer.full_name}</p>
                   <span className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 text-xs font-semibold px-2.5 py-1 rounded-full capitalize">

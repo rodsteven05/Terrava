@@ -82,7 +82,7 @@ exports.getUsers = async (req, res) => {
         'id', 'email', 'full_name', 'role', 'phone', 'phone2', 'birthdate', 'address', 'branch', 'occupation',
         'first_name', 'middle_name', 'last_name', 'extension_name',
         'spouse_first_name', 'spouse_middle_name', 'spouse_last_name', 'spouse_extension_name',
-        'spouse_email', 'spouse_phone', 'spouse_occupation', 'archived', 'created_at'
+        'spouse_email', 'spouse_phone', 'spouse_occupation', 'photo_url', 'archived', 'created_at'
       ],
       order: [['created_at', 'DESC']]
     });
@@ -107,7 +107,7 @@ exports.getBuyers = async (req, res) => {
       attributes: [
         'id', 'email', 'full_name', 'role', 'phone', 'created_at',
         'first_name', 'middle_name', 'last_name', 'extension_name',
-        'phone2', 'birthdate', 'address'
+        'phone2', 'birthdate', 'address', 'photo_url'
       ],
       order: [['full_name', 'ASC']]
     });
@@ -183,8 +183,8 @@ exports.getSalesReport = async (req, res) => {
       where: { status: 'verified' },
       include: [
         { model: db.LandListing, as: 'listing', attributes: ['id', 'title'] },
-        { model: db.User, as: 'buyer', attributes: ['id', 'full_name'] },
-        { model: db.User, as: 'seller', attributes: ['id', 'full_name'] }
+        { model: db.User, as: 'buyer', attributes: ['id', 'full_name', 'photo_url'] },
+        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'photo_url'] }
       ],
       order: [['created_at', 'DESC']]
     });

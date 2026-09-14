@@ -7,6 +7,7 @@ const db = require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const { start: startOverdueCron } = require('./jobs/overdueCron');
 
 app.use(cors());
 app.use(express.json());
@@ -20,6 +21,7 @@ app.use('/api/favorites', require('./routes/favorites'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/blockchain', require('./routes/blockchain'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/installments', require('./routes/installments'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -45,6 +47,7 @@ const start = async () => {
       ['spouse_email', { type: db.Sequelize.STRING(255), allowNull: true }],
       ['spouse_phone', { type: db.Sequelize.STRING(50), allowNull: true }],
       ['spouse_occupation', { type: db.Sequelize.STRING(150), allowNull: true }],
+      ['photo_url', { type: db.Sequelize.STRING(255), allowNull: true }],
       ['archived', { type: db.Sequelize.BOOLEAN, allowNull: false, defaultValue: false }]
     ];
     for (const [column, options] of columnsToAdd) {
@@ -68,10 +71,13 @@ const start = async () => {
       ['in_house_max_term_years', { type: db.Sequelize.INTEGER, allowNull: true }],
       ['in_house_interest_rate_pct', { type: db.Sequelize.DECIMAL(5, 2), allowNull: true }],
       ['bank_government_loan_enabled', { type: db.Sequelize.BOOLEAN, defaultValue: false }],
+      ['penalty_rate_pct', { type: db.Sequelize.DECIMAL(5, 2), allowNull: true, defaultValue: 5.00 }],
+      ['monthly_payment_amount', { type: db.Sequelize.DECIMAL(18, 2), allowNull: true }],
       ['terrain_topography', { type: db.Sequelize.STRING(100), allowNull: true }],
       ['lot_configuration', { type: db.Sequelize.STRING(100), allowNull: true }],
       ['utilities', { type: db.Sequelize.JSONB, defaultValue: {} }],
       ['lot_block_number', { type: db.Sequelize.STRING(100), allowNull: true }],
+      ['photo_geotags', { type: db.Sequelize.JSONB, defaultValue: [] }],
       ['archived', { type: db.Sequelize.BOOLEAN, allowNull: false, defaultValue: false }]
     ];
     for (const [column, options] of listingColumnsToAdd) {
@@ -98,7 +104,10 @@ const start = async () => {
       console.log('Assigned demo seller to Main Tagum branch');
     }
 
-    app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+      startOverdueCron();
+    });
   } catch (error) {
     console.error('Unable to start server:', error);
   }

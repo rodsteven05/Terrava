@@ -19,7 +19,7 @@ exports.create = async (req, res) => {
 exports.getMine = async (req, res) => {
   try {
     const include = [
-      { model: db.User, as: 'buyer', attributes: ['id', 'full_name', 'email'] }
+      { model: db.User, as: 'buyer', attributes: ['id', 'full_name', 'email', 'photo_url'] }
     ];
     let where = {};
 

@@ -36,6 +36,7 @@ module.exports = (sequelize, DataTypes) => {
     spouse_email: DataTypes.STRING(255),
     spouse_phone: DataTypes.STRING(50),
     spouse_occupation: DataTypes.STRING(150),
+    photo_url: DataTypes.STRING(255),
     archived: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
@@ -54,6 +55,8 @@ module.exports = (sequelize, DataTypes) => {
     User.hasMany(models.Transaction, { foreignKey: 'seller_id', as: 'sellerTransactions' });
     User.hasMany(models.Favorite, { foreignKey: 'user_id', as: 'favorites' });
     User.hasMany(models.Notification, { foreignKey: 'user_id', as: 'notifications' });
+    User.hasMany(models.InstallmentAccount, { foreignKey: 'buyer_id', as: 'buyerAccounts' });
+    User.hasMany(models.InstallmentAccount, { foreignKey: 'seller_id', as: 'sellerAccounts' });
   };
 
   return User;

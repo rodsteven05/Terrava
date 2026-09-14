@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import FavoriteButton from '../components/FavoriteButton.jsx'
 import LandDetailsModal from '../components/LandDetailsModal.jsx'
 import MessageSellerModal from '../components/MessageSellerModal.jsx'
+import { BRANCHES, getBranch } from '../utils/branches.js'
 
 export default function MapExplore() {
   const { user } = useAuth()
@@ -19,6 +20,7 @@ export default function MapExplore() {
   const [flyTo, setFlyTo] = useState(null)
   const [selected, setSelected] = useState(null)
   const [expanded, setExpanded] = useState(null)
+  const [activeBranch, setActiveBranch] = useState('all')
   const [panelOpen, setPanelOpen] = useState(true)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [messageOpen, setMessageOpen] = useState(false)
@@ -38,16 +40,15 @@ export default function MapExplore() {
       .finally(() => setLoading(false))
   }, [])
 
-  const getBranch = (l) => {
-    if (l.branch) return l.branch
-    const loc = (l.location_text || '').toLowerCase()
-    if (loc.includes('panabo')) return 'Panabo'
-    if (loc.includes('sto. tomas') || loc.includes('sto tomas') || loc.includes('santo tomas')) return 'Sto. Tomas'
-    if (loc.includes('davao city') || loc.includes('davao')) return 'Davao City'
-    if (loc.includes('mati city') || loc.includes('mati')) return 'Mati City'
-    if (loc.includes('digos city') || loc.includes('digos')) return 'Digos City'
-    return 'Main Tagum'
-  }
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const b = params.get('branch')
+    if (b && BRANCHES.includes(b)) {
+      setActiveBranch(b)
+      setExpanded(b)
+      setFlyTo({ branch: b })
+    }
+  }, [location.search])
 
   const BRANCH_COLORS = {
     'Main Tagum': { bg: 'bg-emerald-50', hover: 'hover:bg-emerald-100', text: 'text-emerald-800', badge: 'bg-emerald-200 text-emerald-800', border: 'border-emerald-100' },
@@ -60,7 +61,11 @@ export default function MapExplore() {
 
   const branchStyle = (branch) => BRANCH_COLORS[branch] || BRANCH_COLORS['Main Tagum']
 
-  const filteredListings = listings.filter((l) => {
+  const branchFiltered = activeBranch === 'all'
+    ? listings
+    : listings.filter((l) => getBranch(l) === activeBranch)
+
+  const filteredListings = branchFiltered.filter((l) => {
     const q = search.toLowerCase()
     return !q ||
       (l.title || '').toLowerCase().includes(q) ||
@@ -140,8 +145,29 @@ export default function MapExplore() {
           </button>
         </div>
 
-        {/* Search */}
-        <div className="p-4 border-b border-gray-200 bg-white">
+        {/* Branch filter + search */}
+        <div className="p-4 border-b border-gray-200 bg-white space-y-3">
+          <div className="relative">
+            <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <select
+              value={activeBranch}
+              onChange={(e) => {
+                const b = e.target.value
+                setActiveBranch(b)
+                setExpanded(b === 'all' ? null : b)
+                setFlyTo(b === 'all' ? null : { branch: b })
+                if (b !== 'all') navigate({ search: `?branch=${encodeURIComponent(b)}` }, { replace: true })
+                else navigate({ search: '' }, { replace: true })
+              }}
+              className="w-full appearance-none pl-10 pr-9 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition shadow-sm cursor-pointer"
+            >
+              <option value="all">All Branches</option>
+              {BRANCHES.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
             <input
@@ -262,68 +288,73 @@ export default function MapExplore() {
 
       {/* Map fills remaining space */}
       <div className="flex-1 relative">
-        <MapView listings={filteredListings} height="100%" flyTo={flyTo} onSelectListing={handleMapSelect} />
+        <MapView listings={filteredListings} height="100%" flyTo={flyTo} onSelectListing={handleMapSelect} selectedListingId={selected?.id} />
 
-        {/* Bottom detail drawer when a listing is selected */}
+        {/* Compact selected listing card */}
         {selected && (
-          <div className="absolute bottom-4 left-4 right-4 md:left-6 md:right-6 bg-white border border-gray-200 shadow-2xl rounded-2xl p-5 z-20 max-w-4xl mx-auto">
+          <div className="absolute bottom-3 left-3 right-3 md:left-4 md:right-auto md:w-[22rem] bg-white/95 backdrop-blur border border-gray-200/80 shadow-2xl rounded-2xl p-4 z-20 max-h-[70vh] overflow-y-auto">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-600 to-emerald-500 rounded-t-2xl" />
-            <div className="flex items-start justify-between mb-4">
+
+            <div className="flex items-start justify-between gap-2 mb-3">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 text-xs font-semibold px-2 py-1 rounded-full capitalize">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize">
                     <Building2 className="w-3 h-3" /> {getBranch(selected)}
                   </span>
-                  <h3 className="font-bold text-gray-900 text-lg">{selected.title}</h3>
-                  <FavoriteButton listingId={selected.id} size={22} className="flex-shrink-0" />
+                  <h3 className="font-bold text-gray-900 text-sm leading-tight">{selected.title}</h3>
                 </div>
-                <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                  <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-brand-600" /> {selected.location_text}
+                <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5 line-clamp-1">
+                  <MapPin className="w-3 h-3 flex-shrink-0 text-brand-600" /> {selected.location_text}
                 </p>
               </div>
-              <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition flex-shrink-0">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                <PesoIcon className="w-4 h-4 text-brand-600 mx-auto mb-1" />
-                <p className="text-xs text-gray-500">Price</p>
-                <p className="text-sm font-bold text-gray-900">₱{Number(selected.price).toLocaleString()}</p>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                <Maximize className="w-4 h-4 text-brand-600 mx-auto mb-1" />
-                <p className="text-xs text-gray-500">Area</p>
-                <p className="text-sm font-bold text-gray-900">{selected.area_sqm} sqm</p>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                <Tag className="w-4 h-4 text-brand-600 mx-auto mb-1" />
-                <p className="text-xs text-gray-500">Status</p>
-                <p className="text-sm font-bold text-gray-900 capitalize">{selected.status}</p>
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <FavoriteButton listingId={selected.id} size={18} className="p-1" />
+                <button onClick={() => setSelected(null)} className="p-1 rounded-md hover:bg-gray-100 text-gray-400 transition">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </div>
+
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="bg-gray-50 rounded-lg p-2 text-center border border-gray-100 overflow-hidden">
+                <PesoIcon className="w-3.5 h-3.5 text-brand-600 mx-auto mb-0.5" />
+                <p className="text-[10px] text-gray-500">Price</p>
+                <p className="text-[10px] font-bold text-gray-900 truncate">₱{Number(selected.price).toLocaleString()}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2 text-center border border-gray-100">
+                <Maximize className="w-3.5 h-3.5 text-brand-600 mx-auto mb-0.5" />
+                <p className="text-[10px] text-gray-500">Area</p>
+                <p className="text-xs font-bold text-gray-900">{Number(selected.area_sqm).toLocaleString()}m²</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2 text-center border border-gray-100">
+                <Tag className="w-3.5 h-3.5 text-brand-600 mx-auto mb-0.5" />
+                <p className="text-[10px] text-gray-500">Status</p>
+                <p className="text-xs font-bold text-gray-900 capitalize">{selected.status}</p>
+              </div>
+            </div>
+
             {selected.description && (
-              <p className="text-sm text-gray-600 mt-3 line-clamp-2">{selected.description}</p>
+              <p className="text-xs text-gray-600 mb-3 line-clamp-2">{selected.description}</p>
             )}
 
             {/* Photo gallery — scrollable thumbnails */}
             {selected.photos?.length > 0 && (
-              <div className="mt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <ImageIcon className="w-3.5 h-3.5" /> Property Photos
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                    <ImageIcon className="w-3 h-3" /> Property Photos
                   </h4>
-                  <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
                     {selected.photos.length}
                   </span>
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-transparent">
+                <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-transparent">
                   {selected.photos.map((url, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => { setLightboxIndex(i); setLightboxOpen(true) }}
-                      className="relative flex-shrink-0 w-24 h-24 rounded-xl border border-gray-200 overflow-hidden group hover:border-emerald-500 transition focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="relative flex-shrink-0 w-16 h-16 rounded-lg border border-gray-200 overflow-hidden group hover:border-emerald-500 transition focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <img src={url} alt={`Property ${i + 1}`} className="w-full h-full object-cover transition group-hover:scale-105" />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition" />
@@ -333,39 +364,42 @@ export default function MapExplore() {
               </div>
             )}
 
-            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="flex flex-col gap-2">
               {user?.role === 'buyer' && (
-                <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
-                  <Building2 className="w-4 h-4 text-brand-600 flex-shrink-0" />
-                  <span className="text-xs font-medium text-gray-600">Meet at:</span>
+                <div className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-2.5 py-2 border border-gray-100">
+                  <div className="flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-brand-600 flex-shrink-0" />
+                    <span className="text-[10px] font-medium text-gray-600">Meet at:</span>
+                  </div>
                   <select
                     value={preferredBranch}
                     onChange={(e) => setPreferredBranch(e.target.value)}
-                    className="bg-transparent text-sm font-semibold text-gray-900 focus:outline-none cursor-pointer"
+                    className="bg-transparent text-xs font-semibold text-gray-900 focus:outline-none cursor-pointer text-right"
                   >
-                    {['Main Tagum', 'Panabo', 'Sto. Tomas', 'Davao City', 'Mati City', 'Digos City'].map((b) => (
+                    {BRANCHES.map((b) => (
                       <option key={b} value={b}>{b}</option>
                     ))}
                   </select>
                 </div>
               )}
-              <div className="flex-1" />
-              {user?.role === 'buyer' && (
+              <div className="flex gap-2">
+                {user?.role === 'buyer' && (
+                  <button
+                    type="button"
+                    onClick={() => setMessageOpen(true)}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition font-semibold text-xs shadow-sm"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" /> Message
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setMessageOpen(true)}
-                  className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition font-semibold text-sm shadow-sm"
+                  onClick={() => setDetailsOpen(true)}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-brand-600 text-white px-3 py-2 rounded-lg hover:bg-brand-700 transition font-semibold text-xs shadow-sm"
                 >
-                  <MessageCircle className="w-4 h-4" /> Message Seller
+                  <Eye className="w-3.5 h-3.5" /> Details
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setDetailsOpen(true)}
-                className="inline-flex items-center justify-center gap-2 bg-brand-600 text-white px-4 py-2.5 rounded-xl hover:bg-brand-700 transition font-semibold text-sm shadow-sm"
-              >
-                <Eye className="w-4 h-4" /> View Details
-              </button>
+              </div>
             </div>
           </div>
         )}
@@ -514,14 +548,20 @@ export default function MapExplore() {
         existingPhotos={selected?.photos || []}
         initialData={
           selected
-            ? {
-                title: selected.title || '',
-                description: selected.description || '',
-                total_area_sqm: selected.area_sqm || '',
-                total_contract_price: selected.price || '',
-                latitude: selected.polygon_geojson?.coordinates?.[0]?.[0]?.[1] || '',
-                longitude: selected.polygon_geojson?.coordinates?.[0]?.[0]?.[0] || '',
-                lot_block_number: selected.lot_block_number || '',
+            ? (() => {
+                const coords = selected.polygon_geojson?.coordinates?.[0] || []
+                const points = coords.length > 1
+                  ? coords.slice(0, -1).map(([lng, lat]) => [lat, lng])
+                  : coords.map(([lng, lat]) => [lat, lng])
+                return {
+                  title: selected.title || '',
+                  description: selected.description || '',
+                  total_area_sqm: selected.area_sqm || '',
+                  total_contract_price: selected.price || '',
+                  latitude: points[0]?.[0] || '',
+                  longitude: points[0]?.[1] || '',
+                  polygon_points: points,
+                  lot_block_number: selected.lot_block_number || '',
                 zoning_classification: selected.zoning_classification || '',
                 land_title_status: selected.land_title_status || '',
                 reservation_fee: selected.reservation_fee || '',
@@ -539,6 +579,7 @@ export default function MapExplore() {
                   telecom_ready: selected.utilities?.telecom_ready || false
                 }
               }
+            })()
             : {}
         }
         onSave={(data) => console.log('Saved land details from map:', data)}

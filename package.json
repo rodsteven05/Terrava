@@ -1,7 +1,7 @@
 {
-  "name": "landchain",
+  "name": "terrava",
   "version": "1.0.0",
-  "description": "LandChain full-stack MVP",
+  "description": "Terrava - Land Transaction Management System",
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"cd server && npm run dev\" \"cd client && npm run dev\"",

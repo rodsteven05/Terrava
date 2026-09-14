@@ -1,8 +1,10 @@
-import { MapPin, Phone, Mail, Building2, Navigation, Clock } from 'lucide-react'
+import { MapPin, Phone, Mail, Building2, Navigation, Clock, Map } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const BRANCHES = [
   {
     name: 'Main Branch',
+    branchKey: 'Main Tagum',
     location: 'Tagum City',
     address: 'Tagum City, Davao del Norte, Philippines',
     phone: '+63 912 000 0001',
@@ -13,6 +15,7 @@ const BRANCHES = [
   },
   {
     name: '2nd Branch',
+    branchKey: 'Panabo',
     location: 'Panabo City',
     address: 'Panabo City, Davao del Norte, Philippines',
     phone: '+63 912 000 0002',
@@ -23,6 +26,7 @@ const BRANCHES = [
   },
   {
     name: '3rd Branch',
+    branchKey: 'Sto. Tomas',
     location: 'Sto. Tomas',
     address: 'Sto. Tomas, Davao del Norte, Philippines',
     phone: '+63 912 000 0003',
@@ -33,6 +37,7 @@ const BRANCHES = [
   },
   {
     name: '4th Branch',
+    branchKey: 'Davao City',
     location: 'Davao City',
     address: 'Davao City, Davao del Sur, Philippines',
     phone: '+63 912 000 0004',
@@ -43,6 +48,7 @@ const BRANCHES = [
   },
   {
     name: '5th Branch',
+    branchKey: 'Mati City',
     location: 'Mati City',
     address: 'Mati City, Davao Oriental, Philippines',
     phone: '+63 912 000 0005',
@@ -53,6 +59,7 @@ const BRANCHES = [
   },
   {
     name: '6th Branch',
+    branchKey: 'Digos City',
     location: 'Digos City',
     address: 'Digos City, Davao del Sur, Philippines',
     phone: '+63 912 000 0006',
@@ -110,14 +117,22 @@ export default function Branches() {
               </div>
             </div>
 
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-brand-600 hover:text-brand-700 border border-brand-200 hover:bg-brand-50 px-4 py-2 rounded-xl transition"
-            >
-              <Navigation className="w-4 h-4" /> Get Directions
-            </a>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link
+                to={`/map?branch=${encodeURIComponent(b.branchKey)}`}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-xl transition"
+              >
+                <Map className="w-4 h-4" /> View Lands on Map
+              </Link>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-brand-600 hover:text-brand-700 border border-brand-200 hover:bg-brand-50 px-4 py-2 rounded-xl transition"
+              >
+                <Navigation className="w-4 h-4" /> Get Directions
+              </a>
+            </div>
           </div>
         ))}
       </div>

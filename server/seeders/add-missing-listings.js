@@ -30,7 +30,8 @@ const addMissingListings = async () => {
           [125.6080, 7.0680]
         ]]
       },
-      photos: []
+      photos: [],
+      photo_geotags: []
     },
     {
       seller_id: seller.id,
@@ -51,7 +52,8 @@ const addMissingListings = async () => {
           [125.6120, 7.0720]
         ]]
       },
-      photos: []
+      photos: [],
+      photo_geotags: []
     },
     {
       seller_id: seller.id,
@@ -72,7 +74,8 @@ const addMissingListings = async () => {
           [125.6000, 7.0600]
         ]]
       },
-      photos: []
+      photos: [],
+      photo_geotags: []
     },
     {
       seller_id: seller.id,
@@ -93,7 +96,8 @@ const addMissingListings = async () => {
           [126.2150, 6.9540]
         ]]
       },
-      photos: []
+      photos: [],
+      photo_geotags: []
     },
     {
       seller_id: seller.id,
@@ -114,7 +118,8 @@ const addMissingListings = async () => {
           [126.2200, 6.9580]
         ]]
       },
-      photos: []
+      photos: [],
+      photo_geotags: []
     },
     {
       seller_id: seller.id,
@@ -135,7 +140,8 @@ const addMissingListings = async () => {
           [126.2100, 6.9500]
         ]]
       },
-      photos: []
+      photos: [],
+      photo_geotags: []
     },
     {
       seller_id: seller.id,
@@ -156,7 +162,8 @@ const addMissingListings = async () => {
           [125.3560, 6.7480]
         ]]
       },
-      photos: []
+      photos: [],
+      photo_geotags: []
     },
     {
       seller_id: seller.id,
@@ -177,7 +184,8 @@ const addMissingListings = async () => {
           [125.3500, 6.7440]
         ]]
       },
-      photos: []
+      photos: [],
+      photo_geotags: []
     },
     {
       seller_id: seller.id,
@@ -198,7 +206,8 @@ const addMissingListings = async () => {
           [125.3600, 6.7520]
         ]]
       },
-      photos: []
+      photos: [],
+      photo_geotags: []
     }
   ];
 

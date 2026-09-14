@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useToast } from '../context/ToastContext.jsx'
 import api from '../api/api.js'
 import Spinner from './Spinner.jsx'
+import Avatar from './Avatar.jsx'
 import { X, CreditCard, Receipt, User, MapPin, CheckCircle, Printer, Landmark } from 'lucide-react'
 
 export default function RecordPaymentModal({ listing, transactions = [], onClose, onRecorded }) {
@@ -166,9 +167,20 @@ export default function RecordPaymentModal({ listing, transactions = [], onClose
 
               <div style={{ background: '#f9fafb', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
                 <p style={{ fontSize: '11px', fontWeight: '700', color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 10px' }}>Buyer</p>
-                <p style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#111827' }}>
-                  <User style={{ width: '18px', height: '18px', color: '#059669', flexShrink: 0 }} /> {receipt.buyer.full_name}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {receipt.buyer.photo_url ? (
+                    <img
+                      src={receipt.buyer.photo_url}
+                      alt={receipt.buyer.full_name}
+                      style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <User style={{ width: '24px', height: '24px', color: '#059669', flexShrink: 0 }} />
+                  )}
+                  <p style={{ fontSize: '15px', fontWeight: '700', margin: 0, color: '#111827' }}>
+                    {receipt.buyer.full_name}
+                  </p>
+                </div>
               </div>
 
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', marginBottom: '14px' }}>
@@ -250,8 +262,8 @@ export default function RecordPaymentModal({ listing, transactions = [], onClose
                 <p className="text-sm text-gray-900 font-medium">{listing.title}</p>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <User className="w-4 h-4 text-brand-600" />
-                <span>Buyer: {buyer.full_name}</span>
+                <Avatar url={buyer?.photo_url} name={buyer?.full_name} sizeClass="w-6 h-6" textClass="text-[10px]" />
+                <span>Buyer: {buyer?.full_name}</span>
               </div>
               <div className="grid grid-cols-2 gap-3 pt-2 border-t border-brand-100/50">
                 <div>

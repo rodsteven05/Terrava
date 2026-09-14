@@ -27,13 +27,17 @@ export const AuthProvider = ({ children }) => {
     setUser(data.user)
   }
 
+  const setAuthUser = (user) => {
+    setUser(user)
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, setAuthUser, logout }}>
       {children}
     </AuthContext.Provider>
   )

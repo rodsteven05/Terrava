@@ -36,7 +36,6 @@ const TITLE_STATUS_OPTIONS = [
   'Under Process'
 ]
 
-const DOWN_PAYMENT_OPTIONS = ['10%', '20%', '30%', '50%']
 
 const TERRAIN_OPTIONS = [
   'Flat / Level',
@@ -71,7 +70,7 @@ const Label = ({ children, required }) => (
   </label>
 )
 
-const Input = ({ type = 'text', value, onChange, placeholder, required, min, step }) => (
+const Input = ({ type = 'text', value, onChange, placeholder, required, min, max, step }) => (
   <input
     type={type}
     value={value}
@@ -79,6 +78,7 @@ const Input = ({ type = 'text', value, onChange, placeholder, required, min, ste
     placeholder={placeholder}
     required={required}
     min={min}
+    max={max}
     step={step}
     className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition"
   />
@@ -144,7 +144,7 @@ const FileDrop = ({ label, accept, preview, fileName, isPdf, inputRef, onChange,
   </div>
 )
 
-export default function CreateListingForm({ onSubmit, initialBranch = '', initialData = null, existingPhotos = [], isEdit = false }) {
+export default function CreateListingForm({ onSubmit, initialBranch = '', initialData = null, existingPhotos = [], existingPhotoGeotags = [], isEdit = false }) {
   const buildInitialState = () => {
     const data = initialData || {}
     const coords = data.polygon_geojson?.coordinates?.[0] || []
@@ -170,6 +170,8 @@ export default function CreateListingForm({ onSubmit, initialBranch = '', initia
       in_house_max_term_years: data.in_house_max_term_years || '',
       in_house_interest_rate_pct: data.in_house_interest_rate_pct || '',
       bank_government_loan_enabled: data.bank_government_loan_enabled || false,
+      penalty_rate_pct: data.penalty_rate_pct || '5.00',
+      monthly_payment_amount: data.monthly_payment_amount || '',
       terrain_topography: data.terrain_topography || '',
       lot_configuration: data.lot_configuration || '',
       utilities: {
@@ -403,7 +405,7 @@ export default function CreateListingForm({ onSubmit, initialBranch = '', initia
               <Label>GIS Boundary Map</Label>
               <span className="text-xs font-medium text-emerald-700">{form.polygon_points.length} point{form.polygon_points.length === 1 ? '' : 's'} added</span>
             </div>
-            <p className="text-xs text-slate-500 mb-3">Click the map to add boundary points. Add at least 3 points to save a property boundary, or leave it empty to continue without one.</p>
+            <p className="text-xs text-slate-500 mb-3">Click anywhere on the map to drop a boundary point, or type lat/lng above and press Add Point. You can add 3 or more points to draw any shape — triangle, square, pentagon, hexagon, etc. There is no maximum point limit.</p>
             <MapView
               listings={[]}
               height="320px"
@@ -487,16 +489,55 @@ export default function CreateListingForm({ onSubmit, initialBranch = '', initia
           </div>
           <div>
             <Label required>Minimum Down Payment Percentage</Label>
-            <Select
+            <Input
+              type="number"
               value={form.minimum_down_payment_pct}
               onChange={(e) => updateField('minimum_down_payment_pct', e.target.value)}
-              options={DOWN_PAYMENT_OPTIONS}
-              placeholder="Select down payment %"
+              placeholder="1–40"
+              required
+              min={1}
+              max={40}
+              step={1}
+            />
+          </div>
+          <div>
+            <Label required>Monthly Payment Amount (PHP)</Label>
+            <Input
+              type="number"
+              value={form.monthly_payment_amount}
+              onChange={(e) => updateField('monthly_payment_amount', e.target.value)}
+              placeholder="e.g. 15000"
+              required
+              min={0}
+              step={0.01}
+            />
+          </div>
+          <div>
+            <Label required>Late Payment Penalty (%)</Label>
+            <Input
+              type="number"
+              value={form.penalty_rate_pct}
+              onChange={(e) => updateField('penalty_rate_pct', e.target.value)}
+              placeholder="2–5"
+              required
+              min={0}
+              max={100}
+              step={0.01}
             />
           </div>
         </div>
 
-        <p className="text-xs text-slate-500 pt-2">Financing options and utility details are managed by the listing owner.</p>
+        <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-800">
+          <p className="font-semibold mb-1">Payment Reminder Policy</p>
+          <ul className="list-disc list-inside space-y-1 text-xs">
+            <li>Buyers receive a friendly reminder during the 30-day grace period.</li>
+            <li>If unpaid after 30 days (31–60 days), a <strong>{form.penalty_rate_pct || 5}% penalty</strong> is added to the monthly dues.</li>
+            <li>61–90 days delinquent: demand letter sent and account flagged for admin review.</li>
+            <li>90+ days overdue: contract is cancelled and the lot becomes available again.</li>
+          </ul>
+        </div>
+
+        <p className="text-xs text-slate-500 pt-2">Financing options, penalty rate, and utility details are managed by the listing owner.</p>
       </SectionCard>
 
       {/* Physical Attributes & Infrastructure */}
@@ -530,11 +571,19 @@ export default function CreateListingForm({ onSubmit, initialBranch = '', initia
             <div className="mb-4">
               <Label>Current Photos</Label>
               <div className="flex flex-wrap gap-3 mt-2">
-                {existingPhotos.map((url, i) => (
-                  <div key={i} className="relative group w-24 h-24">
-                    <img src={url} alt="" className="w-full h-full object-cover rounded-lg border" />
-                  </div>
-                ))}
+                {existingPhotos.map((url, i) => {
+                  const isGeotagged = existingPhotoGeotags.some((tag) => tag.url === url)
+                  return (
+                    <div key={i} className="relative group w-24 h-24">
+                      <img src={url} alt="" className="w-full h-full object-cover rounded-lg border" />
+                      {isGeotagged && (
+                        <span className="absolute bottom-1 left-1 bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                          <MapPin className="w-3 h-3" /> Geotagged
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -562,6 +611,9 @@ export default function CreateListingForm({ onSubmit, initialBranch = '', initia
             </span>
             <span className="text-xs text-slate-400">
               {(isEdit ? existingPhotos.length : 0) + photos.length} / {MAX_PHOTOS} photos
+            </span>
+            <span className="text-xs text-emerald-600 font-medium">
+              Photos with GPS metadata will be automatically geotagged
             </span>
           </button>
           {photoPreviews.length > 0 && (

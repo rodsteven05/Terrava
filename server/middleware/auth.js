@@ -28,3 +28,22 @@ exports.authorize = (...roles) => {
     next();
   };
 };
+
+exports.requireLedgerAccess = (req, res, next) => {
+  try {
+    const ledgerAuthorization = req.headers['x-ledger-authorization'];
+    if (!ledgerAuthorization || !ledgerAuthorization.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Ledger password verification is required' });
+    }
+
+    const ledgerToken = ledgerAuthorization.split(' ')[1];
+    const decoded = verifyToken(ledgerToken);
+    if (decoded.purpose !== 'blockchain-ledger' || decoded.id !== req.user.id || decoded.role !== 'admin') {
+      return res.status(403).json({ error: 'Invalid ledger access token' });
+    }
+
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Ledger access has expired. Enter your password again.' });
+  }
+};

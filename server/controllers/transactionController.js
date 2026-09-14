@@ -2,6 +2,8 @@ const db = require('../models');
 const Blockchain = require('../blockchain/Blockchain');
 const { recordPaymentOnChain } = require('../utils/ethereum');
 const { createNotification } = require('./notificationController');
+const { createInstallmentAccount, allocatePayment } = require('../services/installmentService');
+const { Op } = require('sequelize');
 
 exports.create = async (req, res) => {
   try {
@@ -43,6 +45,25 @@ exports.create = async (req, res) => {
       await listing.update({ status: 'sold' });
     } else if (listing.status === 'available') {
       await listing.update({ status: 'reserved' });
+    }
+
+    // Installment account: create after reservation fee is paid, then allocate this payment
+    const reservationFee = Number(listing.reservation_fee || 0);
+    let activeAccount = await db.InstallmentAccount.findOne({
+      where: { listing_id: listing.id, status: { [Op.ne]: 'defaulted' } }
+    });
+
+    if (!activeAccount && reservationFee > 0 && Number(totalPaid) >= reservationFee && listing.assigned_buyer_id) {
+      const txBeforeThis = Math.max(0, Number(totalPaid) - Number(amount));
+      const reservationCoveredByThis = Math.max(0, Math.min(Number(amount), reservationFee - txBeforeThis));
+      const amountForInstallment = Math.max(0, Number(amount) - reservationCoveredByThis);
+
+      activeAccount = await createInstallmentAccount(listing, listing.assigned_buyer_id, new Date().toISOString().slice(0, 10));
+      if (activeAccount && amountForInstallment > 0) {
+        await allocatePayment(activeAccount.id, amountForInstallment);
+      }
+    } else if (activeAccount) {
+      await allocatePayment(activeAccount.id, Number(amount));
     }
 
     // Notify both buyer and seller about the successful transaction
@@ -93,8 +114,8 @@ exports.getAll = async (req, res) => {
     const transactions = await db.Transaction.findAll({
       include: [
         { model: db.LandListing, as: 'listing', attributes: ['id', 'title', 'location_text', 'area_sqm', 'price', 'branch', 'status', 'lot_block_number'] },
-        { model: db.User, as: 'buyer', attributes: ['id', 'full_name', 'email', 'phone'] },
-        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'branch'] },
+        { model: db.User, as: 'buyer', attributes: ['id', 'full_name', 'email', 'phone', 'photo_url'] },
+        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'branch', 'photo_url'] },
         { model: db.User, as: 'recorder', attributes: ['id', 'full_name', 'email', 'role'] },
         { model: db.Block, as: 'block' }
       ],
@@ -115,8 +136,8 @@ exports.getMine = async (req, res) => {
       where,
       include: [
         { model: db.LandListing, as: 'listing', where: { archived: false }, required: true, attributes: ['id', 'title', 'location_text', 'area_sqm', 'price', 'branch', 'status', 'lot_block_number'] },
-        { model: db.User, as: 'buyer', attributes: ['id', 'full_name', 'email', 'phone'] },
-        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'branch'] },
+        { model: db.User, as: 'buyer', attributes: ['id', 'full_name', 'email', 'phone', 'photo_url'] },
+        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'branch', 'photo_url'] },
         { model: db.User, as: 'recorder', attributes: ['id', 'full_name', 'email', 'role'] },
         { model: db.Block, as: 'block' }
       ],

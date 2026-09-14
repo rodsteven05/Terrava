@@ -25,13 +25,16 @@ class Blockchain {
             ? b.transaction.toJSON()
             : { message: 'Genesis Block' };
         }
-        return new Block(
+        const block = new Block(
           b.index,
           new Date(b.timestamp).getTime(),
           transactionData,
           b.previous_hash,
           b.nonce
         );
+        // Use the stored hash from DB to preserve chain integrity
+        block.hash = b.hash;
+        return block;
       });
     }
   }
@@ -74,12 +77,22 @@ class Blockchain {
   }
 
   isChainValid() {
+    if (this.chain.length === 0) return true;
+
+    // Validate the genesis block hash integrity
+    const genesis = this.chain[0];
+    if (genesis.hash !== genesis.calculateHash()) return false;
+
     for (let i = 1; i < this.chain.length; i++) {
       const current = this.chain[i];
       const previous = this.chain[i - 1];
 
+      // Verify block hash integrity
       if (current.hash !== current.calculateHash()) return false;
+      // Verify chain linkage: each block's previousHash must match the prior block's hash
       if (current.previousHash !== previous.hash) return false;
+      // Verify block hash is non-empty and exists
+      if (!current.hash || !previous.hash) return false;
     }
     return true;
   }
@@ -87,7 +100,8 @@ class Blockchain {
   async persistGenesisIfEmpty() {
     const count = await db.Block.count();
     if (count === 0) {
-      const genesis = this.createGenesisBlock();
+      // Re-use the in-memory genesis created by loadChain() so hashes stay consistent
+      const genesis = this.chain.length > 0 ? this.chain[0] : this.createGenesisBlock();
       await db.Block.create({
         index: genesis.index,
         timestamp: new Date(genesis.timestamp),

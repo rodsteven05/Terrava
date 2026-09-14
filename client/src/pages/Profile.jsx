@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import api from '../api/api.js'
-import { User, Mail, Phone, Shield, MapPin, Calendar, Edit3, Save, X, Lock, Eye, EyeOff, Landmark, Users } from 'lucide-react'
+import Avatar from '../components/Avatar.jsx'
+import { User, Mail, Phone, Shield, MapPin, Calendar, Edit3, Save, X, Lock, Eye, EyeOff, Landmark, Users, Camera, Trash2, Loader2 } from 'lucide-react'
 
 const InfoRow = ({ icon: Icon, label, value }) => (
   <div className="flex items-start gap-3 p-4 bg-brand-50/50 rounded-xl border border-brand-100/60">
@@ -26,10 +27,13 @@ const Field = ({ label, required, children }) => (
 )
 
 export default function Profile() {
-  const { user, login } = useAuth()
+  const { user, setAuthUser } = useAuth()
   const { addToast } = useToast()
   const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [photoLoading, setPhotoLoading] = useState(false)
+  const [photoFile, setPhotoFile] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState(null)
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm: '' })
   const [pwLoading, setPwLoading] = useState(false)
   const [showPw, setShowPw] = useState({ current: false, new: false, confirm: false })
@@ -78,14 +82,61 @@ export default function Profile() {
       const full_name = [form.first_name, form.middle_name, form.last_name, form.extension_name]
         .filter(Boolean).join(' ')
       const res = await api.put('/auth/profile', { ...form, full_name })
-      const token = localStorage.getItem('token')
-      login({ user: res.data.user, token })
+      setAuthUser(res.data.user)
       addToast('Profile updated successfully!', 'success')
       setEditing(false)
     } catch (err) {
       addToast(err.response?.data?.error || 'Update failed', 'error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setPhotoFile(file)
+    const reader = new FileReader()
+    reader.onloadend = () => setPhotoPreview(reader.result)
+    reader.readAsDataURL(file)
+  }
+
+  const confirmPhotoUpload = async () => {
+    if (!photoFile) return
+    setPhotoLoading(true)
+    try {
+      const fd = new FormData()
+      fd.append('photo', photoFile)
+      const res = await api.post('/auth/profile/photo', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setAuthUser(res.data.user)
+      addToast('Profile photo updated', 'success')
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Upload failed', 'error')
+    } finally {
+      setPhotoLoading(false)
+      setPhotoFile(null)
+      setPhotoPreview(null)
+    }
+  }
+
+  const cancelPhotoUpload = () => {
+    setPhotoFile(null)
+    setPhotoPreview(null)
+  }
+
+  const handlePhotoRemove = async () => {
+    if (!user?.photo_url) return
+    if (!window.confirm('Remove your current profile photo?')) return
+    setPhotoLoading(true)
+    try {
+      const res = await api.delete('/auth/profile/photo')
+      setAuthUser(res.data.user)
+      addToast('Profile photo removed', 'success')
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Remove failed', 'error')
+    } finally {
+      setPhotoLoading(false)
     }
   }
 
@@ -109,8 +160,26 @@ export default function Profile() {
       {/* Header card */}
       <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-          <div className="w-20 h-20 bg-brand-600 rounded-2xl flex items-center justify-center text-white text-2xl font-extrabold flex-shrink-0 shadow-lg">
-            {initials}
+          <div className="relative flex-shrink-0">
+            <Avatar
+              url={user?.photo_url}
+              name={user?.full_name}
+              sizeClass="w-20 h-20"
+              textClass="text-2xl"
+              className="shadow-lg"
+            />
+            <label
+              className={`absolute -bottom-1 -right-1 p-1.5 rounded-full bg-brand-600 text-white shadow-md cursor-pointer hover:bg-brand-700 transition ${photoLoading ? 'opacity-70' : ''}`}
+            >
+              {photoLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handlePhotoSelect}
+                disabled={photoLoading}
+              />
+            </label>
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-extrabold text-gray-900 truncate">{user?.full_name || '—'}</h1>
@@ -118,6 +187,15 @@ export default function Profile() {
               <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-brand-100 text-brand-700 capitalize">{user?.role}</span>
               <span className="text-gray-400 text-sm">{user?.email}</span>
             </div>
+            {user?.photo_url && (
+              <button
+                onClick={handlePhotoRemove}
+                disabled={photoLoading}
+                className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-red-600 hover:text-red-700 transition"
+              >
+                <Trash2 className="w-3 h-3" /> Remove photo
+              </button>
+            )}
           </div>
           <button
             onClick={() => setEditing(!editing)}
@@ -129,6 +207,50 @@ export default function Profile() {
           </button>
         </div>
       </div>
+
+      {/* Photo upload confirmation modal */}
+      {photoPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-fadeIn">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Update Profile Photo?</h2>
+              <button
+                onClick={cancelPhotoUpload}
+                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1.5 rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex justify-center mb-6">
+              <img
+                src={photoPreview}
+                alt="Preview"
+                className="w-32 h-32 rounded-2xl object-cover border-4 border-brand-100 shadow-lg"
+              />
+            </div>
+            <p className="text-sm text-gray-500 text-center mb-6">
+              This will replace your current profile photo.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={cancelPhotoUpload}
+                disabled={photoLoading}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmPhotoUpload}
+                disabled={photoLoading}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition flex items-center justify-center gap-2"
+              >
+                {photoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {photoLoading ? 'Uploading...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!editing ? (
         /* ── View mode ── */

@@ -8,6 +8,7 @@ import EmptyState from '../components/EmptyState.jsx'
 import { Search, Plus, MapPin, Scale, ExternalLink, ChevronDown } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import FavoriteButton from '../components/FavoriteButton.jsx'
+import { BRANCHES, getBranch } from '../utils/branches.js'
 
 export default function Home() {
   const { user } = useAuth()
@@ -17,6 +18,7 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [compareIds, setCompareIds] = useState(() => JSON.parse(localStorage.getItem('compareIds') || '[]'))
   const [branch, setBranch] = useState('all')
+  const [flyTo, setFlyTo] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -34,18 +36,6 @@ export default function Home() {
     localStorage.setItem('compareIds', JSON.stringify(next))
   }
 
-  const getBranch = (listing) => {
-    if (listing.branch) return listing.branch
-    const loc = (listing.location_text || '').toLowerCase()
-    if (loc.includes('panabo')) return 'Panabo'
-    if (loc.includes('sto. tomas') || loc.includes('sto tomas') || loc.includes('santo tomas')) return 'Sto. Tomas'
-    if (loc.includes('davao city') || loc.includes('davao')) return 'Davao City'
-    if (loc.includes('mati city') || loc.includes('mati')) return 'Mati City'
-    if (loc.includes('digos city') || loc.includes('digos')) return 'Digos City'
-    if (loc.includes('tagum')) return 'Main Tagum'
-    return 'Other'
-  }
-
   const available = listings.filter((l) => l.status === 'available')
   const filtered = available.filter((l) => {
     const matchesSearch = l.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -54,7 +44,6 @@ export default function Home() {
     const matchesBranch = branch === 'all' || getBranch(l) === branch
     return matchesSearch && matchesBranch
   })
-  const BRANCHES = ['Main Tagum', 'Panabo', 'Sto. Tomas', 'Davao City', 'Mati City', 'Digos City']
   const grouped = Object.fromEntries(
     BRANCHES.map((b) => [b, available.filter((l) => getBranch(l) === b)])
   )
@@ -81,7 +70,7 @@ export default function Home() {
       </div>
 
       <div className="h-[300px] md:h-[400px] rounded-2xl overflow-hidden border border-gray-200 shadow-card">
-        <MapView listings={filtered} height="100%" />
+        <MapView listings={filtered} height="100%" flyTo={flyTo} />
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -98,7 +87,11 @@ export default function Home() {
         <div className="relative min-w-[180px]">
           <select
             value={branch}
-            onChange={(e) => setBranch(e.target.value)}
+            onChange={(e) => {
+              setBranch(e.target.value)
+              if (e.target.value !== 'all') setFlyTo({ branch: e.target.value })
+              else setFlyTo(null)
+            }}
             className="w-full appearance-none pl-4 pr-10 py-3.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm cursor-pointer"
           >
             <option value="all">All Branches ({available.length})</option>

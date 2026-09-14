@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-contract LandChainPayment {
+contract TerravaPayment {
     struct PaymentRecord {
         uint256 listingId;
         uint256 transactionId;

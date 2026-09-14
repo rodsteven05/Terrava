@@ -3,7 +3,7 @@ import api from '../api/api.js'
 import MapView from '../components/MapView.jsx'
 import Spinner from '../components/Spinner.jsx'
 import EmptyState from '../components/EmptyState.jsx'
-import { MapPin, CheckCircle2, Clock, Maximize, ChevronDown, ChevronUp, Receipt, Printer, Landmark, CreditCard } from 'lucide-react'
+import { MapPin, CheckCircle2, Clock, Maximize, ChevronDown, ChevronUp, Receipt, Printer, Landmark, CreditCard, Wallet, Calendar, AlertTriangle } from 'lucide-react'
 import PesoIcon from '../components/PesoIcon.jsx'
 
 export default function MyLands() {
@@ -206,6 +206,66 @@ export default function MyLands() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Installment schedule summary */}
+                  {land.installmentAccounts?.length > 0 && (() => {
+                    const account = land.installmentAccounts[0]
+                    const tcp = Number(land.total_contract_price || land.price || 0)
+                    const reservationFee = Number(land.reservation_fee || 0)
+                    const minDownPct = Number(land.minimum_down_payment_pct || 0)
+                    const downPayment = Math.round((tcp * (minDownPct / 100)) * 100) / 100
+                    const balance = Math.max(tcp - reservationFee - downPayment, 0)
+                    const months = (land.in_house_max_term_years || 0) * 12
+                    const explicitMonthly = Number(land.monthly_payment_amount || 0)
+                    const monthly = explicitMonthly > 0
+                      ? explicitMonthly
+                      : (months > 0 ? Math.round((balance / months) * 100) / 100 : 0)
+                    const statusColors = {
+                      active: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+                      grace_period: 'bg-amber-50 text-amber-700 border-amber-100',
+                      overdue: 'bg-orange-50 text-orange-700 border-orange-100',
+                      delinquent: 'bg-red-50 text-red-700 border-red-100',
+                      defaulted: 'bg-gray-50 text-gray-700 border-gray-200',
+                      paid_off: 'bg-blue-50 text-blue-700 border-blue-100'
+                    }
+                    return (
+                      <div className="mt-5 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Wallet className="w-4 h-4 text-slate-600" />
+                          <h3 className="text-sm font-bold text-slate-800">Installment Schedule</h3>
+                          <span className={`ml-auto inline-flex px-2 py-0.5 rounded-lg text-[10px] font-bold border capitalize ${statusColors[account.status] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                            {account.status?.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="bg-white rounded-lg p-3 border border-slate-100 text-center">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Term</p>
+                            <p className="text-sm font-bold text-slate-800">{land.in_house_max_term_years || 0} yr(s)</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 border border-slate-100 text-center">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Monthly</p>
+                            <p className="text-sm font-bold text-slate-800">₱{monthly.toLocaleString()}</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 border border-slate-100 text-center">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Next Due</p>
+                            <p className="text-sm font-bold text-slate-800">{account.next_due_date ? new Date(account.next_due_date).toLocaleDateString() : '—'}</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 border border-slate-100 text-center">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Balance</p>
+                            <p className="text-sm font-bold text-slate-800">₱{Number(account.remaining_balance || remaining).toLocaleString()}</p>
+                          </div>
+                        </div>
+                        {['overdue', 'delinquent', 'defaulted'].includes(account.status) && (
+                          <div className="mt-3 flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg p-3">
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                            <p>
+                              Your account is <strong>{account.status.replace(/_/g, ' ')}</strong>. Please settle your obligation immediately to avoid further penalties or cancellation.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {/* Progress bar */}
                   <div className="mt-4">

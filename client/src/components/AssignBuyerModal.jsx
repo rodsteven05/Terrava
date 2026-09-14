@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../api/api.js'
 import { useToast } from '../context/ToastContext.jsx'
+import Avatar from './Avatar.jsx'
+import useAutoRefresh from '../hooks/useAutoRefresh.js'
 import { X, Search, UserCheck, Loader2 } from 'lucide-react'
 
 export default function AssignBuyerModal({ listing, onClose, onAssigned }) {
@@ -11,16 +13,20 @@ export default function AssignBuyerModal({ listing, onClose, onAssigned }) {
   const [assigning, setAssigning] = useState(false)
   const [selected, setSelected] = useState(null)
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(true)
-      api.get(`/admin/buyers${search ? `?search=${encodeURIComponent(search)}` : ''}`)
-        .then((res) => setBuyers(res.data))
-        .catch(() => {})
-        .finally(() => setLoading(false))
-    }, 300)
-    return () => clearTimeout(timer)
+  const fetchBuyers = useCallback(() => {
+    setLoading(true)
+    api.get(`/admin/buyers${search ? `?search=${encodeURIComponent(search)}` : ''}`)
+      .then((res) => setBuyers(res.data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [search])
+
+  useEffect(() => {
+    const timer = setTimeout(fetchBuyers, 300)
+    return () => clearTimeout(timer)
+  }, [fetchBuyers])
+
+  useAutoRefresh(fetchBuyers, [fetchBuyers], 15000)
 
   const handleAssign = async () => {
     if (!selected) return
@@ -82,9 +88,6 @@ export default function AssignBuyerModal({ listing, onClose, onAssigned }) {
             </div>
           ) : (
             buyers.map((b) => {
-              const initials = b.full_name
-                ? b.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
-                : 'U'
               const isSelected = selected?.id === b.id
               return (
                 <button
@@ -96,11 +99,13 @@ export default function AssignBuyerModal({ listing, onClose, onAssigned }) {
                       : 'hover:bg-brand-50 text-gray-700'
                   }`}
                 >
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                    isSelected ? 'bg-white/20 text-white' : 'bg-brand-100 text-brand-700'
-                  }`}>
-                    {initials}
-                  </div>
+                  <Avatar
+                    url={b.photo_url}
+                    name={b.full_name}
+                    sizeClass="w-9 h-9"
+                    textClass="text-xs"
+                    fallbackClass={isSelected ? 'bg-white/20 text-white' : 'bg-brand-100 text-brand-700'}
+                  />
                   <div className="min-w-0 flex-1">
                     <p className={`font-semibold text-sm truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>
                       {b.full_name}

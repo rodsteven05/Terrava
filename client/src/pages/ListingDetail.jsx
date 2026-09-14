@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import useAutoRefresh from '../hooks/useAutoRefresh.js'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
@@ -11,6 +12,7 @@ import MilestoneTracker from '../components/MilestoneTracker.jsx'
 import { MapPin, User, Phone, Maximize, Tag, CreditCard, CheckCircle, ChevronLeft, ChevronRight, UserCheck, Mail, Calendar, Home, FileText, Mountain, Zap, Droplets, Wifi, MessageCircle, ArrowLeft, X } from 'lucide-react'
 import PesoIcon from '../components/PesoIcon.jsx'
 import FavoriteButton from '../components/FavoriteButton.jsx'
+import Avatar from '../components/Avatar.jsx'
 import MessageSellerModal from '../components/MessageSellerModal.jsx'
 
 export default function ListingDetail() {
@@ -27,8 +29,7 @@ export default function ListingDetail() {
   const [activePhoto, setActivePhoto] = useState(0)
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
-  useEffect(() => {
-    setLoading(true)
+  const fetchListing = useCallback(() => {
     api.get(`/listings/${id}`)
       .then((res) => {
         setListing(res.data)
@@ -38,7 +39,9 @@ export default function ListingDetail() {
         addToast(err.response?.data?.error || 'Failed to load listing', 'error')
       })
       .finally(() => setLoading(false))
-  }, [id, user, addToast])
+  }, [id, addToast])
+
+  useAutoRefresh(fetchListing, [fetchListing], 30000)
 
   useEffect(() => {
     if (!lightboxOpen) return
@@ -101,9 +104,14 @@ export default function ListingDetail() {
           <p className="text-3xl font-bold text-brand-600 mt-3">₱{Number(listing.price).toLocaleString()}</p>
         </div>
         <div className="bg-white p-5 rounded-2xl shadow-card border border-gray-100 min-w-[220px]">
-          <p className="text-sm text-gray-500 flex items-center gap-1.5 mb-1"><User className="w-4 h-4" /> Seller</p>
-          <p className="font-bold text-gray-900 text-lg">{listing.seller?.full_name}</p>
-          <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-2"><Phone className="w-4 h-4 text-brand-600" /> {listing.seller?.phone}</p>
+          <p className="text-sm text-gray-500 flex items-center gap-1.5 mb-2"><User className="w-4 h-4" /> Seller</p>
+          <div className="flex items-center gap-3">
+            <Avatar url={listing.seller?.photo_url} name={listing.seller?.full_name} sizeClass="w-10 h-10" textClass="text-xs" />
+            <div>
+              <p className="font-bold text-gray-900 text-lg">{listing.seller?.full_name}</p>
+              <p className="text-sm text-gray-500 flex items-center gap-1.5"><Phone className="w-4 h-4 text-brand-600" /> {listing.seller?.phone}</p>
+            </div>
+          </div>
           {user?.role === 'buyer' && (
             <button
               onClick={() => setShowMessage(true)}
@@ -276,33 +284,47 @@ export default function ListingDetail() {
             </div>
           </div>
 
-          <div>
-            <h4 className="text-sm font-semibold text-gray-500 mb-3 flex items-center gap-2">
-              <PesoIcon className="w-4 h-4 text-brand-600" /> Financial Terms
-            </h4>
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Reservation Fee</span>
-                <span className="font-medium text-gray-900">{listing.reservation_fee ? `₱${Number(listing.reservation_fee).toLocaleString()}` : '—'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Min. Down Payment</span>
-                <span className="font-medium text-gray-900">{listing.minimum_down_payment_pct || '—'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Cash Discount</span>
-                <span className="font-medium text-gray-900">{listing.cash_term_enabled ? `${listing.cash_term_discount_pct}%` : 'Not offered'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">In-House Financing</span>
-                <span className="font-medium text-gray-900">{listing.in_house_financing_enabled ? `${listing.in_house_max_term_years} yrs @ ${listing.in_house_interest_rate_pct}%` : 'Not offered'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Bank / Gov Loan</span>
-                <span className="font-medium text-gray-900">{listing.bank_government_loan_enabled ? 'Supported' : 'Not supported'}</span>
+          {(() => {
+            const isOwnerOrAdmin = user && (user.role === 'admin' || user.role === 'seller')
+            const isAssignedBuyer = user && user.role === 'buyer' && listing.assigned_buyer_id === user.id
+            return isOwnerOrAdmin || isAssignedBuyer
+          })() && (
+            <div>
+              <h4 className="text-sm font-semibold text-gray-500 mb-3 flex items-center gap-2">
+                <PesoIcon className="w-4 h-4 text-brand-600" /> Financial Terms
+              </h4>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Reservation Fee</span>
+                  <span className="font-medium text-gray-900">{listing.reservation_fee ? `₱${Number(listing.reservation_fee).toLocaleString()}` : '—'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Min. Down Payment</span>
+                  <span className="font-medium text-gray-900">{listing.minimum_down_payment_pct || '—'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Cash Discount</span>
+                  <span className="font-medium text-gray-900">{listing.cash_term_enabled ? `${listing.cash_term_discount_pct}%` : 'Not offered'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">In-House Financing</span>
+                  <span className="font-medium text-gray-900">{listing.in_house_financing_enabled ? `${listing.in_house_max_term_years} yrs @ ${listing.in_house_interest_rate_pct}%` : 'Not offered'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Bank / Gov Loan</span>
+                  <span className="font-medium text-gray-900">{listing.bank_government_loan_enabled ? 'Supported' : 'Not supported'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Monthly Payment</span>
+                  <span className="font-medium text-gray-900">{listing.monthly_payment_amount ? `₱${Number(listing.monthly_payment_amount).toLocaleString()}` : '—'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Late Penalty</span>
+                  <span className="font-medium text-gray-900">{listing.penalty_rate_pct ? `${listing.penalty_rate_pct}%` : '—'}</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div>
             <h4 className="text-sm font-semibold text-gray-500 mb-3 flex items-center gap-2">

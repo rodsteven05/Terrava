@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import useAutoRefresh from '../../hooks/useAutoRefresh.js'
+import { useNavigate } from 'react-router-dom'
 import { useToast } from '../../context/ToastContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useNotifications } from '../../context/NotificationContext.jsx'
@@ -8,22 +10,22 @@ import EmptyState from '../../components/EmptyState.jsx'
 import LandDetailsModal from '../../components/LandDetailsModal.jsx'
 import MapView from '../../components/MapView.jsx'
 import CreateListingForm from '../../components/CreateListingForm.jsx'
+import Avatar from '../../components/Avatar.jsx'
 import PesoIcon from '../../components/PesoIcon.jsx'
 import AdminSettingsModal from '../../components/AdminSettingsModal.jsx'
 import {
   LayoutDashboard, Users, List, CreditCard, Link2, Map, Globe, ShieldCheck,
-  Shield, Lock, Search, Trash2, Edit3, CheckCircle2, X,
-  Filter, Eye, AlertCircle, TrendingUp, Activity, CheckCircle, Calendar,
+  Shield, Lock, Search, Trash2, Edit3, CheckCircle2, X, Banknote, LandPlot, Info,
+  Filter, Eye, EyeOff, AlertCircle, TrendingUp, Activity, CheckCircle, Calendar,
   FileText, Building2, LayoutList, MapPin, Maximize, Tag, User, Store,
   Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, LogOut, Settings, Plus,
-  ExternalLink, Trophy, Clock, XCircle, Archive, RotateCcw
+  ExternalLink, Trophy, Clock, XCircle, Archive, RotateCcw, Image as ImageIcon,
+  Wallet
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend
 } from 'recharts'
-import { MapContainer, TileLayer, Marker, Popup, LayersControl, useMap } from 'react-leaflet'
-import L from 'leaflet'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -33,6 +35,7 @@ const TABS = [
   { key: 'mapview', label: 'Global Map View', icon: Globe },
   { key: 'users', label: 'User Directory', icon: Users },
   { key: 'transactions', label: 'Transactions', icon: CreditCard },
+  { key: 'installments', label: 'Installment Accounts', icon: Wallet },
   { key: 'blockchain', label: 'Blockchain Ledger', icon: Link2 }
 ]
 
@@ -52,6 +55,7 @@ function ProfileField({ label, value, wide = false }) {
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate()
   const { addToast } = useToast()
   const { user, login, logout } = useAuth()
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications()
@@ -60,9 +64,6 @@ export default function AdminDashboard() {
   const [notifOpen, setNotifOpen] = useState(false)
   const profileRef = useRef(null)
   const notifRef = useRef(null)
-  const initials = user?.full_name
-    ? user.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
-    : 'A'
   const [stats, setStats] = useState(null)
   const [users, setUsers] = useState([])
   const [chain, setChain] = useState([])
@@ -70,6 +71,9 @@ export default function AdminDashboard() {
   const [contract, setContract] = useState(null)
   const [listings, setListings] = useState([])
   const [transactions, setTransactions] = useState([])
+  const [installments, setInstallments] = useState([])
+  const [installmentFilter, setInstallmentFilter] = useState('all')
+  const [installmentSearch, setInstallmentSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [userFilter, setUserFilter] = useState('all')
   const [userBranchFilter, setUserBranchFilter] = useState('all')
@@ -89,6 +93,11 @@ export default function AdminDashboard() {
   const txnPerPage = 10
   const [blockchainSearch, setBlockchainSearch] = useState('')
   const [blockchainPage, setBlockchainPage] = useState(1)
+  const [ledgerPassword, setLedgerPassword] = useState('')
+  const [showLedgerPassword, setShowLedgerPassword] = useState(false)
+  const [ledgerError, setLedgerError] = useState('')
+  const [unlockingLedger, setUnlockingLedger] = useState(false)
+  const [ledgerUnlocked, setLedgerUnlocked] = useState(false)
   const blocksPerPage = 10
   const [roleEditUser, setRoleEditUser] = useState(null)
   const [roleEditValue, setRoleEditValue] = useState('')
@@ -102,8 +111,10 @@ export default function AdminDashboard() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('adminDashboardSidebarCollapsed') === 'true')
   const [mapSelected, setMapSelected] = useState(null)
   const [mapPanelOpen, setMapPanelOpen] = useState(true)
+  const [mapDetailsMinimized, setMapDetailsMinimized] = useState(false)
   const [mapExpandedBranch, setMapExpandedBranch] = useState(null)
   const [mapFlyTo, setMapFlyTo] = useState(null)
+  const [mapBranchFilter, setMapBranchFilter] = useState('all')
 
   // Export filter modal state
   const [exportModalOpen, setExportModalOpen] = useState(false)
@@ -112,10 +123,61 @@ export default function AdminDashboard() {
   const [exportFormat, setExportFormat] = useState('csv')
   const [exportCategory, setExportCategory] = useState('all')
 
-  const fetchListings = async () => {
+  const fetchListings = useCallback(async () => {
     const archivedParam = landArchiveFilter === 'archived' ? 'true' : landArchiveFilter === 'all' ? 'all' : 'false'
     const res = await api.get(`/listings?all=true&archived=${archivedParam}`)
     setListings(res.data)
+  }, [landArchiveFilter])
+
+  const fetchAdminData = useCallback(() => {
+    Promise.all([
+      api.get('/admin/dashboard').then((res) => setStats(res.data)),
+      api.get(`/admin/users?archived=${userArchiveFilter === 'archived' ? 'true' : 'false'}`).then((res) => setUsers(res.data)),
+      fetchListings(),
+      api.get('/transactions').then((res) => setTransactions(res.data)),
+      api.get('/installments').then((res) => setInstallments(res.data))
+    ])
+      .catch((err) => addToast(err.response?.data?.error || 'Failed to load admin data', 'error'))
+      .finally(() => setLoading(false))
+  }, [addToast, fetchListings, userArchiveFilter])
+
+  const loadBlockchain = async () => {
+    const [chainResponse, validationResponse, contractResponse] = await Promise.all([
+      api.get('/blockchain/chain'),
+      api.get('/blockchain/validate'),
+      api.get('/blockchain/contract')
+    ])
+    setChain(chainResponse.data)
+    setValid(validationResponse.data.valid)
+    setContract(contractResponse.data)
+  }
+
+  const selectTab = (tab) => {
+    if (tab === 'blockchain') {
+      sessionStorage.removeItem('blockchainLedgerToken')
+      setLedgerUnlocked(false)
+      setLedgerError('')
+    }
+    setActiveTab(tab)
+  }
+
+  const unlockLedger = async (event) => {
+    event.preventDefault()
+    setLedgerError('')
+    setUnlockingLedger(true)
+    try {
+      const response = await api.post('/auth/blockchain-ledger/unlock', { password: ledgerPassword })
+      sessionStorage.setItem('blockchainLedgerToken', response.data.ledgerToken)
+      await loadBlockchain()
+      setLedgerPassword('')
+      setLedgerUnlocked(true)
+    } catch (error) {
+      sessionStorage.removeItem('blockchainLedgerToken')
+      setLedgerUnlocked(false)
+      setLedgerError(error.response?.data?.error || 'Unable to unlock the blockchain ledger')
+    } finally {
+      setUnlockingLedger(false)
+    }
   }
 
   useEffect(() => {
@@ -132,29 +194,31 @@ export default function AdminDashboard() {
   }, [chain.length, blockchainSearch])
 
   useEffect(() => {
-    setLoading(true)
-    Promise.all([
-      api.get('/admin/dashboard').then((res) => setStats(res.data)),
-      api.get(`/admin/users?archived=${userArchiveFilter === 'archived' ? 'true' : 'false'}`).then((res) => setUsers(res.data)),
-      api.get('/blockchain/validate').then((res) => setValid(res.data.valid)),
-      api.get('/blockchain/chain').then((res) => setChain(res.data)),
-      api.get('/blockchain/contract').then((res) => setContract(res.data)),
-      fetchListings(),
-      api.get('/transactions').then((res) => setTransactions(res.data))
-    ])
-      .catch((err) => addToast(err.response?.data?.error || 'Failed to load admin data', 'error'))
-      .finally(() => setLoading(false))
-  }, [addToast, userArchiveFilter, landArchiveFilter])
+    if (activeTab !== 'blockchain' || !ledgerUnlocked) return
+
+    loadBlockchain().catch((error) => {
+      sessionStorage.removeItem('blockchainLedgerToken')
+      setLedgerUnlocked(false)
+      setLedgerError(error.response?.data?.error || 'Ledger access has expired. Enter your password again.')
+    })
+  }, [activeTab, ledgerUnlocked])
+
+  useAutoRefresh(fetchAdminData, [fetchAdminData], 30000)
 
   const landModalInitialData = useMemo(() => {
     if (!selectedLand) return {}
+    const coords = selectedLand.polygon_geojson?.coordinates?.[0] || []
+    const points = coords.length > 1
+      ? coords.slice(0, -1).map(([lng, lat]) => [lat, lng])
+      : coords.map(([lng, lat]) => [lat, lng])
     return {
       title: selectedLand.title || '',
       description: selectedLand.description || '',
       total_area_sqm: selectedLand.area_sqm || '',
       total_contract_price: selectedLand.price || '',
-      latitude: selectedLand.polygon_geojson?.coordinates?.[0]?.[0]?.[1] || '',
-      longitude: selectedLand.polygon_geojson?.coordinates?.[0]?.[0]?.[0] || '',
+      latitude: points[0]?.[0] || '',
+      longitude: points[0]?.[1] || '',
+      polygon_points: points,
       lot_block_number: selectedLand.lot_block_number || '',
       zoning_classification: selectedLand.zoning_classification || '',
       land_title_status: selectedLand.land_title_status || '',
@@ -231,40 +295,6 @@ export default function AdminDashboard() {
 
   const formatPeso = (n) => `₱${Number(n || 0).toLocaleString()}`
   const formatDate = (d) => d ? new Date(d).toLocaleString() : '—'
-
-  const getListingCoords = (l) => {
-    let lat = null, lng = null
-    if (l?.latitude && l?.longitude) {
-      lat = Number(l.latitude)
-      lng = Number(l.longitude)
-    } else if (l?.polygon_geojson?.coordinates?.length) {
-      const first = l.polygon_geojson.coordinates[0]?.find((c) => Array.isArray(c) && c.length >= 2)
-      if (first) {
-        lng = Number(first[0])
-        lat = Number(first[1])
-      }
-    }
-    if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) return [lat, lng]
-    return null
-  }
-
-  const markerIcon = new L.DivIcon({
-    className: 'custom-marker',
-    html: `<div class="w-4 h-4 rounded-full bg-emerald-600 border-2 border-white shadow-md ring-1 ring-emerald-900/30"></div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8]
-  })
-
-  const FitBounds = ({ listings }) => {
-    const map = useMap()
-    useEffect(() => {
-      const coords = listings.map(getListingCoords).filter(Boolean)
-      if (coords.length > 0) {
-        map.fitBounds(L.latLngBounds(coords), { padding: [40, 40], maxZoom: 14 })
-      }
-    }, [map, listings])
-    return null
-  }
 
   const filteredUsers = users.filter((u) => {
     const matchesRole = userFilter === 'all' || u.role === userFilter
@@ -621,13 +651,11 @@ export default function AdminDashboard() {
       fd.append('location_text', selectedLand.location_text || '')
       fd.append('status', selectedLand.status || 'available')
 
-      // Rebuild polygon_geojson if lat/lng were edited
-      const lat = Number(form.latitude)
-      const lng = Number(form.longitude)
-      if (!isNaN(lat) && !isNaN(lng)) {
+      // Rebuild polygon_geojson if boundary points were edited
+      if (form.polygon_points && form.polygon_points.length >= 3) {
         fd.append('polygon_geojson', JSON.stringify({
           type: 'Polygon',
-          coordinates: [[[lng, lat], [lng + 0.001, lat], [lng + 0.001, lat + 0.001], [lng, lat + 0.001], [lng, lat]]]
+          coordinates: [[...form.polygon_points, form.polygon_points[0]].map(([lat, lng]) => [Number(lng), Number(lat)])]
         }))
       } else if (selectedLand.polygon_geojson) {
         fd.append('polygon_geojson', JSON.stringify(selectedLand.polygon_geojson))
@@ -726,7 +754,8 @@ export default function AdminDashboard() {
                   api.get('/blockchain/chain').then((res) => setChain(res.data)),
                   api.get('/blockchain/contract').then((res) => setContract(res.data)),
                   fetchListings(),
-                  api.get('/transactions').then((res) => setTransactions(res.data))
+                  api.get('/transactions').then((res) => setTransactions(res.data)),
+                  api.get('/installments').then((res) => setInstallments(res.data))
                 ]).catch(() => addToast('Failed to refresh dashboard data', 'error')).finally(() => setLoading(false))
               }}
               className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-sm font-bold bg-white/10 hover:bg-white/20 border border-white/10 transition text-white"
@@ -768,13 +797,15 @@ export default function AdminDashboard() {
         </div>
 
         {/* Quick action tiles */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
           {[
             { label: 'Pending Verifications', value: stats?.pendingListings || 0, icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', hover: 'hover:bg-amber-100', onClick: () => { setLandStatusFilter('unverified'); setActiveTab('lands') } },
             { label: 'Verified Listings', value: stats?.verifiedListings || 0, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', hover: 'hover:bg-emerald-100', onClick: () => { setLandStatusFilter('available'); setActiveTab('lands') } },
             { label: 'Reserved / Pending Payment', value: listings.filter((l) => l.status === 'reserved').length, icon: CreditCard, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100', hover: 'hover:bg-orange-100', onClick: () => { setLandStatusFilter('reserved'); setActiveTab('lands') } },
             { label: 'Total Sellers', value: users.filter((u) => u.role === 'seller').length, icon: Building2, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', hover: 'hover:bg-blue-100', onClick: () => { setUserFilter('seller'); setActiveTab('users') } },
-            { label: 'Recent Transactions', value: transactions.length, icon: Activity, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', hover: 'hover:bg-purple-100', onClick: () => setActiveTab('blockchain') }
+            { label: 'Recent Transactions', value: transactions.length, icon: Activity, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', hover: 'hover:bg-purple-100', onClick: () => selectTab('blockchain') },
+            { label: 'Delinquent Accounts', value: installments.filter((a) => a.status === 'delinquent').length, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', hover: 'hover:bg-red-100', onClick: () => { setInstallmentFilter('delinquent'); setActiveTab('installments') } },
+            { label: 'Defaulted Accounts', value: installments.filter((a) => a.status === 'defaulted').length, icon: XCircle, color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', hover: 'hover:bg-gray-100', onClick: () => { setInstallmentFilter('defaulted'); setActiveTab('installments') } }
           ].map(({ label, value, icon: Icon, color, bg, border, hover, onClick }) => (
             <button
               key={label}
@@ -1118,16 +1149,20 @@ export default function AdminDashboard() {
     const adminCount = users.filter((u) => u.role === 'admin').length
 
     const userAvatar = (u) => {
-      const initials = (u.full_name || 'U').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
       const colors = {
         admin: 'bg-purple-100 text-purple-700 ring-purple-200',
         seller: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
         buyer: 'bg-blue-100 text-blue-700 ring-blue-200'
       }
       return (
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold ring-2 ${colors[u.role] || 'bg-gray-100 text-gray-700 ring-gray-200'}`}>
-          {initials}
-        </div>
+        <Avatar
+          url={u.photo_url}
+          name={u.full_name}
+          sizeClass="w-10 h-10"
+          textClass="text-xs"
+          fallbackClass={colors[u.role] || 'bg-gray-100 text-gray-700 ring-gray-200'}
+          className="ring-2"
+        />
       )
     }
 
@@ -1159,24 +1194,12 @@ export default function AdminDashboard() {
               <p className="text-emerald-100 text-sm mt-0.5">Manage buyers, sellers, and administrators</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search users..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/10 border border-white/10 text-white placeholder:text-emerald-200 focus:outline-none focus:ring-2 focus:ring-white/30 w-56"
-              />
-            </div>
-            <button
-              onClick={() => handleExport()}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-white text-emerald-800 hover:bg-emerald-50 transition shadow-sm"
-            >
-              <FileText className="w-4 h-4" /> Export
-            </button>
-          </div>
+          <button
+            onClick={() => handleExport()}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-white text-emerald-800 hover:bg-emerald-50 transition shadow-sm"
+          >
+            <FileText className="w-4 h-4" /> Export
+          </button>
         </div>
 
         {/* Summary cards */}
@@ -1363,16 +1386,6 @@ export default function AdminDashboard() {
     const start = (txnPage - 1) * txnPerPage
     const paginatedTxn = sortedTxn.slice(start, start + txnPerPage)
 
-    const statusPill = (status) => {
-      const s = status || 'pending'
-      const styles = {
-        verified: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-        pending: 'bg-amber-100 text-amber-700 border-amber-200',
-        failed: 'bg-red-100 text-red-700 border-red-200'
-      }
-      return <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border ${styles[s] || styles.pending} capitalize`}>{s}</span>
-    }
-
     return (
       <div className="space-y-5 animate-fadeIn">
         {/* Header */}
@@ -1384,35 +1397,23 @@ export default function AdminDashboard() {
               <p className="text-emerald-100 text-sm mt-0.5">Full payment transparency across all branches</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search transactions..."
-                value={txnSearch}
-                onChange={(e) => { setTxnSearch(e.target.value); setTxnPage(1) }}
-                className="pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/10 border border-white/10 text-white placeholder:text-emerald-200 focus:outline-none focus:ring-2 focus:ring-white/30 w-56"
-              />
-            </div>
-            <button
-              onClick={() => handleExport()}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-white text-emerald-800 hover:bg-emerald-50 transition shadow-sm"
-            >
-              <FileText className="w-4 h-4" /> Export
-            </button>
-          </div>
+          <button
+            onClick={() => handleExport()}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-white text-emerald-800 hover:bg-emerald-50 transition shadow-sm"
+          >
+            <FileText className="w-4 h-4" /> Export
+          </button>
         </div>
 
         {/* Summary cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Total Transactions', value: filteredTxn.length, icon: List, color: 'bg-emerald-100 text-emerald-700' },
-            { label: 'Total Amount', value: formatPeso(totalAmount), icon: PesoIcon, color: 'bg-emerald-100 text-emerald-700' },
-            { label: 'Verified', value: verifiedCount, icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-700' },
-            { label: 'Pending', value: pendingCount, icon: AlertCircle, color: 'bg-amber-100 text-amber-700' }
-          ].map(({ label, value, icon: Icon, color }) => (
-            <div key={label} className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 flex items-center gap-4">
+            { label: 'Total Transactions', value: filteredTxn.length, icon: List, color: 'bg-emerald-100 text-emerald-700', accent: 'border-t-emerald-500' },
+            { label: 'Total Amount', value: formatPeso(totalAmount), icon: PesoIcon, color: 'bg-blue-100 text-blue-700', accent: 'border-t-blue-500' },
+            { label: 'Verified', value: verifiedCount, icon: CheckCircle2, color: 'bg-green-100 text-green-700', accent: 'border-t-green-500' },
+            { label: 'Pending', value: pendingCount, icon: AlertCircle, color: 'bg-amber-100 text-amber-700', accent: 'border-t-amber-500' }
+          ].map(({ label, value, icon: Icon, color, accent }) => (
+            <div key={label} className={`bg-white/95 rounded-2xl shadow-md border border-gray-100 border-t-4 p-5 flex items-center gap-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 ${accent}`}>
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
                 <Icon className="w-6 h-6" />
               </div>
@@ -1474,18 +1475,15 @@ export default function AdminDashboard() {
                 <tr>
                   <th className="px-5 py-3.5 font-bold text-emerald-900 text-xs uppercase tracking-wide">Reference</th>
                   <th className="px-5 py-3.5 font-bold text-emerald-900 text-xs uppercase tracking-wide">Property</th>
-                  <th className="px-5 py-3.5 font-bold text-emerald-900 text-xs uppercase tracking-wide">Branch</th>
                   <th className="px-5 py-3.5 font-bold text-emerald-900 text-xs uppercase tracking-wide">Buyer</th>
                   <th className="px-5 py-3.5 font-bold text-emerald-900 text-xs uppercase tracking-wide">Seller</th>
-                  <th className="px-5 py-3.5 font-bold text-emerald-900 text-xs uppercase tracking-wide">Amount</th>
-                  <th className="px-5 py-3.5 font-bold text-emerald-900 text-xs uppercase tracking-wide">Status</th>
                   <th className="px-5 py-3.5 font-bold text-emerald-900 text-xs uppercase tracking-wide">Date</th>
                   <th className="px-5 py-3.5 font-bold text-emerald-900 text-xs uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {paginatedTxn.length === 0 ? (
-                  <tr><td colSpan={9} className="px-5 py-12 text-center text-gray-400"><EmptyState title="No transactions found" message="Try adjusting your search or filters." /></td></tr>
+                  <tr><td colSpan={6} className="px-5 py-12 text-center text-gray-400"><EmptyState title="No transactions found" message="Try adjusting your search or filters." /></td></tr>
                 ) : (
                   paginatedTxn.map((t) => {
                     const branch = t.listing ? getBranch(t.listing) : (t.seller?.branch || 'Main Tagum')
@@ -1498,7 +1496,6 @@ export default function AdminDashboard() {
                             <p className="text-xs text-gray-500 truncate" title={t.listing?.location_text}>{t.listing?.location_text || branch}</p>
                           </div>
                         </td>
-                        <td className="px-5 py-4">{branchBadge(branch)}</td>
                         <td className="px-5 py-4">
                           <div>
                             <p className="font-medium text-gray-900">{t.buyer?.full_name || '—'}</p>
@@ -1511,8 +1508,6 @@ export default function AdminDashboard() {
                             <p className="text-xs text-gray-500">{t.seller?.email || ''}</p>
                           </div>
                         </td>
-                        <td className="px-5 py-4 font-extrabold text-emerald-700">{formatPeso(t.amount)}</td>
-                        <td className="px-5 py-4">{statusPill(t.status)}</td>
                         <td className="px-5 py-4 text-gray-500 text-xs">{formatDate(t.created_at || t.createdAt)}</td>
                         <td className="px-5 py-4">
                           <button
@@ -1559,6 +1554,31 @@ export default function AdminDashboard() {
   }
 
   const renderBlockchain = () => {
+    if (!ledgerUnlocked) {
+      return (
+        <div className="max-w-md mx-auto py-12">
+          <form onSubmit={unlockLedger} className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 space-y-5">
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><Lock className="w-6 h-6" /></div>
+            <div>
+              <h1 className="text-2xl font-extrabold text-gray-900">Unlock Blockchain Ledger</h1>
+              <p className="text-sm text-gray-500 mt-1">Enter your admin password to view protected payment audit records.</p>
+            </div>
+            <div>
+              <label htmlFor="ledger-password" className="block text-sm font-semibold text-gray-700 mb-1.5">Admin Password</label>
+              <div className="relative">
+                <input id="ledger-password" type={showLedgerPassword ? 'text' : 'password'} value={ledgerPassword} onChange={(event) => setLedgerPassword(event.target.value)} autoComplete="current-password" required className="w-full rounded-xl border border-gray-300 px-3 py-2.5 pr-11 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                <button type="button" onClick={() => setShowLedgerPassword((visible) => !visible)} aria-label={showLedgerPassword ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 px-3 text-gray-400 hover:text-emerald-700">
+                  {showLedgerPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+            {ledgerError && <p className="text-sm text-red-600">{ledgerError}</p>}
+            <button type="submit" disabled={unlockingLedger} className="w-full rounded-xl bg-emerald-700 text-white py-2.5 font-bold hover:bg-emerald-800 disabled:opacity-60 transition">{unlockingLedger ? 'Verifying...' : 'Unlock Ledger'}</button>
+          </form>
+        </div>
+      )
+    }
+
     const query = blockchainSearch.trim().toLowerCase()
     const filteredChain = chain.filter((block) => {
       if (!query) return true
@@ -1737,10 +1757,14 @@ export default function AdminDashboard() {
     )
   }
 
-  const renderMapExplorer = ({ data, title, subtitle }) => {
+  const renderMapExplorer = ({ data, title, subtitle, branchFilter, setBranchFilter }) => {
     const selected = mapSelected
 
-    const grouped = data.reduce((acc, l) => {
+    const visibleData = branchFilter && branchFilter !== 'all'
+      ? data.filter((l) => getBranch(l) === branchFilter && l.status === 'available')
+      : data
+
+    const grouped = visibleData.reduce((acc, l) => {
       const b = getBranch(l)
       if (!acc[b]) acc[b] = []
       acc[b].push(l)
@@ -1778,16 +1802,26 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search lands..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/10 border border-white/10 text-white placeholder:text-emerald-200 focus:outline-none focus:ring-2 focus:ring-white/30 w-56"
-              />
-            </div>
+            {setBranchFilter && (
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <select
+                  value={branchFilter}
+                  onChange={(e) => {
+                    const b = e.target.value
+                    setBranchFilter(b)
+                    if (b !== 'all') setMapFlyTo({ branch: b })
+                  }}
+                  className="pl-9 pr-8 py-2.5 rounded-xl text-sm bg-white/10 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-white/30 appearance-none cursor-pointer min-w-[170px]"
+                >
+                  <option value="all" className="text-gray-900">All Branches</option>
+                  {['Main Tagum', 'Panabo', 'Sto. Tomas', 'Davao City', 'Mati City', 'Digos City'].map((b) => (
+                    <option key={b} value={b} className="text-gray-900">{b}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/70 pointer-events-none" />
+              </div>
+            )}
             <button
               onClick={() => setAddLandOpen(true)}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-white text-emerald-800 hover:bg-emerald-50 transition shadow-sm"
@@ -1803,14 +1837,14 @@ export default function AdminDashboard() {
             <div className="p-4 bg-gradient-to-r from-emerald-700 to-emerald-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-lg">Listings</h3>
-                <p className="text-xs text-emerald-100">{data.length} properties</p>
+                <p className="text-xs text-emerald-100">{visibleData.length} properties</p>
               </div>
               <button onClick={() => setMapPanelOpen(false)} className="p-1.5 rounded-lg hover:bg-white/20 transition text-white/80 lg:hidden">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {data.length === 0 ? (
+              {visibleData.length === 0 ? (
                 <EmptyState title="No listings" message="No land listings match the current filters." />
               ) : (
                 Object.entries(grouped).map(([branch, items]) => {
@@ -1846,6 +1880,8 @@ export default function AdminDashboard() {
                                     scrollWheelZoom={false}
                                     zoomControl={false}
                                     doubleClickZoom={false}
+                                    showLayersControl={false}
+                                    showAttribution={false}
                                   />
                                   <span className={`absolute top-2 left-2 px-2 py-1 rounded-lg text-[10px] font-bold shadow-sm backdrop-blur-sm ${style.bg} ${style.text}`}>
                                     {getBranch(l)}
@@ -1891,63 +1927,232 @@ export default function AdminDashboard() {
 
           {/* Map */}
           <div className="flex-1 relative min-h-0">
-            <MapView listings={data} height="100%" flyTo={mapFlyTo} onSelectListing={handleSelect} />
+            <MapView listings={visibleData} height="100%" flyTo={mapFlyTo} onSelectListing={handleSelect} selectedListingId={mapSelected?.id} />
             {selected && (
-              <>
-                <div className="absolute top-16 right-4 z-20 flex items-center gap-2">
-                  {!selected.is_verified && (
+              <div className="absolute bottom-3 left-3 right-3 md:left-4 md:right-auto md:w-[22rem] bg-white/95 backdrop-blur border border-gray-200/80 shadow-2xl rounded-2xl p-4 z-20 max-h-[70vh] overflow-y-auto animate-fadeIn">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-t-2xl" />
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize">
+                        <Building2 className="w-3 h-3" /> {getBranch(selected)}
+                      </span>
+                      <h3 className="font-bold text-gray-900 text-sm leading-tight">{selected.title}</h3>
+                    </div>
+                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5 line-clamp-1">
+                      <MapPin className="w-3 h-3 flex-shrink-0 text-emerald-600" /> {selected.location_text || getBranch(selected)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
                     <button
-                      onClick={() => handleVerifyListing(selected.id)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-lg"
+                      onClick={() => setMapDetailsMinimized((v) => !v)}
+                      className="p-1 rounded-md hover:bg-gray-100 text-gray-400 transition"
+                      aria-label={mapDetailsMinimized ? 'Expand details' : 'Collapse details'}
+                      title={mapDetailsMinimized ? 'Expand details' : 'Collapse details'}
                     >
-                      <CheckCircle className="w-3.5 h-3.5" /> Verify
+                      {mapDetailsMinimized ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
-                  )}
-                  <button
-                    onClick={() => setSelectedLand(selected)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50 transition shadow-lg"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" /> Edit
-                  </button>
-                  <button onClick={() => setMapSelected(null)} className="p-2 rounded-xl bg-white text-gray-400 hover:text-gray-600 hover:bg-gray-50 border border-gray-200 transition shadow-lg">
-                    <X className="w-4 h-4" />
-                  </button>
+                    <button onClick={() => setMapSelected(null)} className="p-1 rounded-md hover:bg-gray-100 text-gray-400 transition">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="absolute bottom-4 left-4 right-4 md:left-6 md:right-6 bg-white border border-gray-200 shadow-2xl rounded-2xl p-5 z-20 max-w-4xl mx-auto">
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-t-2xl" />
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs font-semibold px-2 py-1 rounded-full capitalize">
-                          <Building2 className="w-3 h-3" /> {getBranch(selected)}
-                        </span>
-                        <h3 className="font-bold text-gray-900 text-lg">{selected.title}</h3>
+
+                {!mapDetailsMinimized && (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      <div className="bg-gray-50 rounded-lg p-2 text-center border border-gray-100 overflow-hidden">
+                        <PesoIcon className="w-3.5 h-3.5 text-emerald-600 mx-auto mb-0.5" />
+                        <p className="text-[10px] text-gray-500">Price</p>
+                        <p className="text-[10px] font-bold text-gray-900 truncate">{formatPeso(selected.price)}</p>
                       </div>
-                      <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                        <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-emerald-600" /> {selected.location_text || getBranch(selected)}
-                      </p>
+                      <div className="bg-gray-50 rounded-lg p-2 text-center border border-gray-100">
+                        <Maximize className="w-3.5 h-3.5 text-emerald-600 mx-auto mb-0.5" />
+                        <p className="text-[10px] text-gray-500">Area</p>
+                        <p className="text-xs font-bold text-gray-900">{Number(selected.area_sqm).toLocaleString()}m²</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-2 text-center border border-gray-100">
+                        <Tag className="w-3.5 h-3.5 text-emerald-600 mx-auto mb-0.5" />
+                        <p className="text-[10px] text-gray-500">Status</p>
+                        <p className="text-xs font-bold text-gray-900 capitalize">{selected.status}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 mt-4">
-                    <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                      <PesoIcon className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-xs text-gray-500">Price</p>
-                      <p className="text-sm font-bold text-gray-900">{formatPeso(selected.price)}</p>
+
+                    {selected.description && (
+                      <p className="text-xs text-gray-600 mb-3 line-clamp-2">{selected.description}</p>
+                    )}
+
+                    {selected.photos?.length > 0 && (
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                            <ImageIcon className="w-3 h-3" /> Property Photos
+                          </h4>
+                          <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                            {selected.photos.length}
+                          </span>
+                        </div>
+                        <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-transparent">
+                          {selected.photos.map((url, i) => (
+                            <div key={i} className="relative flex-shrink-0 w-16 h-16 rounded-lg border border-gray-200 overflow-hidden">
+                              <img src={url} alt={`Property ${i + 1}`} className="w-full h-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      {!selected.is_verified && (
+                        <button
+                          onClick={() => handleVerifyListing(selected.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition"
+                        >
+                          <CheckCircle className="w-3 h-3" /> Verify
+                        </button>
+                      )}
+                      <button
+                        onClick={() => navigate(`/edit-listing/${selected.id}`)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+                      >
+                        <Edit3 className="w-3 h-3" /> Edit
+                      </button>
+                      <button
+                        onClick={() => setLandActionTarget(selected)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                          selected.archived
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                            : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
+                        }`}
+                      >
+                        {selected.archived ? <><RotateCcw className="w-3 h-3" /> Restore</> : <><Archive className="w-3 h-3" /> Archive</>}
+                      </button>
                     </div>
-                    <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                      <Maximize className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-xs text-gray-500">Area</p>
-                      <p className="text-sm font-bold text-gray-900">{selected.area_sqm} sqm</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                      <Tag className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-xs text-gray-500">Status</p>
-                      <p className="text-sm font-bold text-gray-900 capitalize">{selected.status}</p>
-                    </div>
-                  </div>
-                </div>
-              </>
+                  </>
+                )}
+              </div>
             )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderInstallments = () => {
+    const query = installmentSearch.trim().toLowerCase()
+    const filtered = installments.filter((a) => {
+      const matchesFilter = installmentFilter === 'all' || a.status === installmentFilter
+      const matchesSearch = !query || [
+        a.listing?.title,
+        a.listing?.location_text,
+        a.buyer?.full_name,
+        a.buyer?.email,
+        a.seller?.full_name,
+        a.seller?.branch
+      ].some((v) => String(v ?? '').toLowerCase().includes(query))
+      return matchesFilter && matchesSearch
+    })
+
+    const statusStyles = {
+      active: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+      grace_period: 'bg-amber-50 text-amber-700 border-amber-100',
+      overdue: 'bg-orange-50 text-orange-700 border-orange-100',
+      delinquent: 'bg-red-50 text-red-700 border-red-100',
+      defaulted: 'bg-gray-50 text-gray-700 border-gray-200',
+      paid_off: 'bg-blue-50 text-blue-700 border-blue-100'
+    }
+
+    return (
+      <div className="space-y-5 animate-fadeIn">
+        <div className="bg-gradient-to-r from-slate-700 to-slate-900 rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl"><Wallet className="w-7 h-7 text-white" /></div>
+            <div>
+              <h2 className="text-2xl font-extrabold">Installment Accounts</h2>
+              <p className="text-slate-100 text-sm mt-0.5">Track buyer payment obligations and delinquencies</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true)
+              api.get('/installments').then((res) => setInstallments(res.data)).finally(() => setLoading(false))
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-white text-slate-800 hover:bg-slate-50 transition shadow-sm"
+          >
+            <Activity className="w-4 h-4" /> Refresh
+          </button>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search buyer, property, branch..."
+              value={installmentSearch}
+              onChange={(e) => setInstallmentSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={installmentFilter}
+              onChange={(e) => setInstallmentFilter(e.target.value)}
+              className="pl-3 pr-8 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer min-w-[160px]"
+            >
+              <option value="all">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="grace_period">Grace Period</option>
+              <option value="overdue">Overdue</option>
+              <option value="delinquent">Delinquent</option>
+              <option value="defaulted">Defaulted</option>
+              <option value="paid_off">Paid Off</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100 text-xs uppercase font-bold text-gray-500">
+                <tr>
+                  <th className="px-5 py-3">Property</th>
+                  <th className="px-5 py-3">Buyer</th>
+                  <th className="px-5 py-3">Branch</th>
+                  <th className="px-5 py-3">Monthly</th>
+                  <th className="px-5 py-3">Term</th>
+                  <th className="px-5 py-3">Next Due</th>
+                  <th className="px-5 py-3">Balance</th>
+                  <th className="px-5 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-5 py-8 text-center text-gray-500">
+                      No installment accounts found.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((a) => (
+                    <tr key={a.id} className="hover:bg-gray-50/70 transition">
+                      <td className="px-5 py-4 font-semibold text-gray-900">{a.listing?.title || '—'}</td>
+                      <td className="px-5 py-4 text-gray-600">{a.buyer?.full_name || '—'}</td>
+                      <td className="px-5 py-4 text-gray-600">{a.seller?.branch || '—'}</td>
+                      <td className="px-5 py-4 font-semibold text-gray-900">{formatPeso(a.monthly_payment_amount)}</td>
+                      <td className="px-5 py-4 text-gray-600">{a.term_years || 0} yr(s)</td>
+                      <td className="px-5 py-4 text-gray-600">{a.next_due_date ? new Date(a.next_due_date).toLocaleDateString() : '—'}</td>
+                      <td className="px-5 py-4 font-semibold text-gray-900">{formatPeso(a.remaining_balance)}</td>
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-bold border capitalize ${statusStyles[a.status] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                          {a.status?.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1969,31 +2174,21 @@ export default function AdminDashboard() {
       <div className="space-y-5 animate-fadeIn">
         {/* Controls bar */}
         <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search lands..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
-            />
+          <div className="flex items-center bg-gray-100 rounded-xl p-1">
+            <button
+              onClick={() => setLandView('list')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${landView === 'list' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <LayoutList className="w-4 h-4" /> List View
+            </button>
+            <button
+              onClick={() => setLandView('map')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${landView === 'map' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <Map className="w-4 h-4" /> Map View
+            </button>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center bg-gray-100 rounded-xl p-1">
-              <button
-                onClick={() => setLandView('list')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${landView === 'list' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <LayoutList className="w-4 h-4" /> List View
-              </button>
-              <button
-                onClick={() => setLandView('map')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${landView === 'map' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <Map className="w-4 h-4" /> Map View
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center gap-3 lg:ml-auto">
             <div className="relative">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <select
@@ -2042,6 +2237,22 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Search bar below list/map view tabs — hidden in map view */}
+        {landView !== 'map' && (
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4">
+            <div className="relative w-full">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search lands..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
+              />
+            </div>
+          </div>
+        )}
+
         {landView === 'map' ? (
           renderMapExplorer({
             data: filteredListings,
@@ -2053,84 +2264,22 @@ export default function AdminDashboard() {
             <div className="relative rounded-2xl border border-gray-200 bg-white overflow-hidden h-[28rem] lg:h-[32rem] shadow-card">
               <button
                 onClick={() => setAddLandOpen(true)}
-                className="absolute top-4 right-4 z-20 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-lg"
+                className="absolute bottom-4 left-4 z-20 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-lg"
               >
                 <Plus className="w-4 h-4" /> Add Land
               </button>
-              <MapContainer
-                center={[7.1, 125.65]}
-                zoom={10}
+              <MapView
+                listings={filteredListings}
+                height="100%"
+                fitBounds={true}
                 scrollWheelZoom={false}
-                className="h-full w-full z-0"
-              >
-                <LayersControl position="topleft">
-                  <LayersControl.BaseLayer name="Standard map">
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                  </LayersControl.BaseLayer>
-                  <LayersControl.BaseLayer checked name="Satellite">
-                    <TileLayer
-                      attribution="Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
-                      url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                    />
-                  </LayersControl.BaseLayer>
-                </LayersControl>
-                <FitBounds listings={filteredListings} />
-                {filteredListings.map((l) => {
-                  const coords = getListingCoords(l)
-                  if (!coords) return null
-                  const style = getStyle(getBranch(l))
-                  return (
-                    <Marker key={l.id} position={coords} icon={markerIcon}>
-                      <Popup minWidth={200}>
-                        <div className="space-y-2 min-w-[180px]">
-                          <p className="text-sm font-bold text-gray-900 leading-tight">{l.title || 'Untitled'}</p>
-                          <div className="flex items-center gap-1">
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg ${style.bg} ${style.text}`}>
-                              <MapPin className="w-3 h-3" /> {getBranch(l)}
-                            </span>
-                          </div>
-                          <p className="text-xs font-bold text-emerald-700">{formatPeso(l.price)}</p>
-                          <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                            <span className={`px-1.5 py-0.5 rounded-full font-bold ${l.is_verified ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {l.is_verified ? 'Verified' : 'Unverified'}
-                            </span>
-                            <span className="capitalize">{l.status}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 pt-1 flex-wrap">
-                            {!l.is_verified && (
-                              <button
-                                onClick={() => handleVerifyListing(l.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition"
-                              >
-                                <CheckCircle className="w-3 h-3" /> Verify
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setSelectedLand(l)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
-                            >
-                              <Edit3 className="w-3 h-3" /> Edit
-                            </button>
-                            <button
-                              onClick={() => setLandActionTarget(l)}
-                              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition ${
-                                l.archived
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                  : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
-                              }`}
-                            >
-                              {l.archived ? <><RotateCcw className="w-3 h-3" /> Restore</> : <><Archive className="w-3 h-3" /> Archive</>}
-                            </button>
-                          </div>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  )
-                })}
-              </MapContainer>
+                containerClassName="h-full w-full"
+                adminActions={{
+                  onVerify: (l) => handleVerifyListing(l.id),
+                  onEdit: (l) => navigate(`/edit-listing/${l.id}`),
+                  onArchive: setLandActionTarget,
+                }}
+              />
             </div>
 
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6">
@@ -2155,7 +2304,7 @@ export default function AdminDashboard() {
                           {l.photos?.[0] ? (
                             <img src={l.photos[0]} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
                           ) : (
-                            <MapView singleListing={l} height="100%" dragging={false} scrollWheelZoom={false} zoomControl={false} doubleClickZoom={false} />
+                            <MapView singleListing={l} height="100%" dragging={false} scrollWheelZoom={false} zoomControl={false} doubleClickZoom={false} showLayersControl={false} showAttribution={false} />
                           )}
                           <span className={`absolute top-2 left-2 px-2 py-1 rounded-lg text-[10px] font-bold shadow-sm backdrop-blur-sm ${style.bg} ${style.text}`}>
                             {getBranch(l)}
@@ -2170,7 +2319,7 @@ export default function AdminDashboard() {
                                   <CheckCircle className="w-3 h-3" />
                                 </button>
                               )}
-                              <button onClick={() => setSelectedLand(l)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition">
+                              <button onClick={() => navigate(`/edit-listing/${l.id}`)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition">
                                 <Edit3 className="w-3 h-3" /> Edit
                               </button>
                               <button
@@ -2222,7 +2371,9 @@ export default function AdminDashboard() {
   const renderMapView = () => renderMapExplorer({
     data: listings,
     title: 'Global Map View',
-    subtitle: 'All Terrava land listings across every branch on one interactive map'
+    subtitle: 'All Terrava land listings across every branch on one interactive map',
+    branchFilter: mapBranchFilter,
+    setBranchFilter: setMapBranchFilter
   })
 
   return (
@@ -2268,7 +2419,7 @@ export default function AdminDashboard() {
             return (
               <button
                 key={key}
-                onClick={() => setActiveTab(key)}
+                onClick={() => selectTab(key)}
                 title={label}
                 className={`w-full flex items-center gap-3 rounded-xl text-sm font-semibold transition ${
                   active
@@ -2293,9 +2444,14 @@ export default function AdminDashboard() {
         {!collapsed && (
           <div className="p-4 border-t border-white/10">
             <div className="rounded-2xl bg-white/10 border border-white/10 backdrop-blur-sm p-4 flex items-center gap-3 mb-3">
-              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-md ring-2 ring-white/20">
-                {initials}
-              </div>
+              <Avatar
+                url={user?.photo_url}
+                name={user?.full_name}
+                sizeClass="w-11 h-11"
+                textClass="text-sm"
+                fallbackClass="bg-gradient-to-br from-emerald-400 to-emerald-600"
+                className="shadow-md ring-2 ring-white/20"
+              />
               <div className="min-w-0">
                 <p className="text-sm font-bold text-white truncate">{user?.full_name || 'System Admin'}</p>
                 <p className="text-xs text-emerald-200 capitalize truncate">{user?.role || 'admin'}</p>
@@ -2314,8 +2470,12 @@ export default function AdminDashboard() {
         <header className="sticky top-0 z-40 flex-shrink-0 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 sm:px-6 py-[22px] shadow-sm">
           <div className="flex items-center justify-between gap-4 h-11">
             <div>
-              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-tight">Admin Dashboard</h1>
-              <p className="text-xs text-gray-500 leading-tight">Multi-branch land selling system control center</p>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-tight">
+                {activeTab === 'overview' ? 'Admin Dashboard' : TABS.find((t) => t.key === activeTab)?.label || 'Admin Dashboard'}
+              </h1>
+              <p className="text-xs text-gray-500 leading-tight">
+                {activeTab === 'overview' ? 'Multi-branch land selling system control center' : `Terrava admin ${TABS.find((t) => t.key === activeTab)?.label.toLowerCase() || ''}`}
+              </p>
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3">
@@ -2328,7 +2488,9 @@ export default function AdminDashboard() {
                 >
                   <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white" />
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full ring-2 ring-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
                   )}
                 </button>
                 {notifOpen && (
@@ -2349,7 +2511,7 @@ export default function AdminDashboard() {
                     ) : (
                       notifications.map((n) => {
                         const isListing = n.type === 'listing';
-                        const Icon = isListing ? Map : n.type === 'transaction' ? CreditCard : Bell;
+                        const Icon = isListing ? LandPlot : n.type === 'transaction' ? Banknote : Info;
                         return (
                           <button
                             key={n.id}
@@ -2365,7 +2527,7 @@ export default function AdminDashboard() {
                               n.is_read ? 'bg-white' : 'bg-emerald-50/40'
                             }`}
                           >
-                            <div className={`mt-0.5 p-1.5 rounded-lg ${isListing ? 'bg-emerald-100 text-emerald-700' : n.type === 'transaction' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                            <div className={`mt-0.5 p-1.5 rounded-lg ${isListing ? 'bg-blue-100 text-blue-700' : n.type === 'transaction' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                               <Icon className="w-4 h-4" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -2388,9 +2550,14 @@ export default function AdminDashboard() {
                   onClick={() => setProfileOpen(!profileOpen)}
                   className="flex items-center justify-center gap-2.5 h-11 pl-1.5 pr-3 sm:pr-3.5 rounded-xl hover:bg-gray-100 transition"
                 >
-                  <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-emerald-100">
-                    {initials}
-                  </div>
+                  <Avatar
+                    url={user?.photo_url}
+                    name={user?.full_name}
+                    sizeClass="w-9 h-9"
+                    textClass="text-sm"
+                    fallbackClass="bg-emerald-600"
+                    className="ring-2 ring-emerald-100"
+                  />
                   <span className="hidden sm:block text-sm font-bold text-gray-900 leading-none truncate max-w-[160px]">
                     {user?.full_name}
                   </span>
@@ -2432,7 +2599,7 @@ export default function AdminDashboard() {
                 return (
                   <button
                     key={key}
-                    onClick={() => setActiveTab(key)}
+                    onClick={() => selectTab(key)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition ${
                       activeTab === key
                         ? 'bg-emerald-700 text-white'
@@ -2453,6 +2620,7 @@ export default function AdminDashboard() {
             {activeTab === 'overview' && renderOverview()}
             {activeTab === 'users' && renderUsers()}
             {activeTab === 'transactions' && renderTransactions()}
+            {activeTab === 'installments' && renderInstallments()}
             {activeTab === 'blockchain' && renderBlockchain()}
             {activeTab === 'lands' && renderLands()}
             {activeTab === 'mapview' && renderMapView()}
@@ -2643,9 +2811,13 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 animate-fadeIn">
             <div className="sticky top-0 z-10 -mt-6 -mx-6 mb-5 px-6 pt-6 pb-4 bg-white border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-12 h-12 rounded-full bg-emerald-100 flex-shrink-0 flex items-center justify-center text-emerald-700 font-bold">
-                  {viewUser.full_name?.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'U'}
-                </div>
+                <Avatar
+                  url={viewUser.photo_url}
+                  name={viewUser.full_name}
+                  sizeClass="w-12 h-12"
+                  textClass="text-sm"
+                  fallbackClass="bg-emerald-100 text-emerald-700"
+                />
                 <div className="min-w-0">
                   <h3 className="text-lg font-bold text-gray-900 truncate">{viewUser.full_name || 'User Details'}</h3>
                   <p className="text-xs text-gray-500 capitalize">{viewUser.role || 'buyer'} profile details</p>
@@ -2751,7 +2923,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="md:col-span-2 bg-gradient-to-r from-emerald-700 to-emerald-900 rounded-2xl p-5 text-white flex items-center justify-between">
+              <div className="md:col-span-2 bg-gradient-to-r from-emerald-700 to-emerald-900 rounded-2xl p-5 text-white flex items-center justify-between shadow-md">
                 <div>
                   <p className="text-sm text-emerald-100">Total Amount</p>
                   <p className="text-3xl font-extrabold">{formatPeso(selectedTxn.amount)}</p>
@@ -2759,8 +2931,11 @@ export default function AdminDashboard() {
                 <div className="bg-white/20 p-3 rounded-xl"><PesoIcon className="w-8 h-8 text-white" /></div>
               </div>
 
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <p className="text-xs text-gray-500 mb-1">Status</p>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-emerald-500 p-4 hover:shadow-md transition">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Status</p>
+                </div>
                 <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-full border ${
                   selectedTxn.status === 'verified' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
                   selectedTxn.status === 'pending' ? 'bg-amber-100 text-amber-700 border-amber-200' :
@@ -2771,57 +2946,69 @@ export default function AdminDashboard() {
                 </span>
               </div>
 
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <p className="text-xs text-gray-500 mb-1">Payment Method</p>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-blue-500 p-4 hover:shadow-md transition">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-blue-600">Payment Method</p>
+                </div>
                 <p className="font-bold text-gray-900 capitalize">{selectedTxn.payment_method || '—'}</p>
               </div>
 
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <p className="text-xs text-gray-500 mb-1">Transaction Date</p>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-purple-500 p-4 hover:shadow-md transition">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-purple-600">Transaction Date</p>
+                </div>
                 <p className="font-bold text-gray-900">{formatDate(selectedTxn.created_at || selectedTxn.createdAt)}</p>
               </div>
 
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <p className="text-xs text-gray-500 mb-1">Branch</p>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-amber-500 p-4 hover:shadow-md transition">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-amber-600" />
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Branch</p>
+                </div>
                 <p className="font-bold text-gray-900">{selectedTxn.listing ? getBranch(selectedTxn.listing) : (selectedTxn.seller?.branch || 'Main Tagum')}</p>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="border border-gray-100 rounded-xl p-4">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-emerald-600 p-4 hover:shadow-md transition">
                 <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-emerald-600" /> Property Information</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                  <div><p className="text-xs text-gray-500">Title</p><p className="font-semibold text-gray-900">{selectedTxn.listing?.title || '—'}</p></div>
-                  <div><p className="text-xs text-gray-500">Location</p><p className="font-semibold text-gray-900">{selectedTxn.listing?.location_text || '—'}</p></div>
-                  <div><p className="text-xs text-gray-500">Lot/Block</p><p className="font-semibold text-gray-900">{selectedTxn.listing?.lot_block_number || '—'}</p></div>
-                  <div><p className="text-xs text-gray-500">Area</p><p className="font-semibold text-gray-900">{selectedTxn.listing?.area_sqm ? `${selectedTxn.listing.area_sqm} sqm` : '—'}</p></div>
+                  <div className="bg-emerald-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 mb-0.5">Title</p><p className="font-semibold text-gray-900">{selectedTxn.listing?.title || '—'}</p></div>
+                  <div className="bg-emerald-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 mb-0.5">Location</p><p className="font-semibold text-gray-900">{selectedTxn.listing?.location_text || '—'}</p></div>
+                  <div className="bg-emerald-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 mb-0.5">Lot/Block</p><p className="font-semibold text-gray-900">{selectedTxn.listing?.lot_block_number || '—'}</p></div>
+                  <div className="bg-emerald-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 mb-0.5">Area</p><p className="font-semibold text-gray-900">{selectedTxn.listing?.area_sqm ? `${selectedTxn.listing.area_sqm} sqm` : '—'}</p></div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-gray-100 rounded-xl p-4">
-                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2"><User className="w-4 h-4 text-emerald-600" /> Buyer</h4>
-                  <div className="space-y-2 text-sm">
-                    <div><p className="text-xs text-gray-500">Full Name</p><p className="font-semibold text-gray-900">{selectedTxn.buyer?.full_name || '—'}</p></div>
-                    <div><p className="text-xs text-gray-500">Email</p><p className="font-semibold text-gray-900">{selectedTxn.buyer?.email || '—'}</p></div>
-                    <div><p className="text-xs text-gray-500">Phone</p><p className="font-semibold text-gray-900">{selectedTxn.buyer?.phone || '—'}</p></div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-blue-500 p-4 hover:shadow-md transition">
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2"><User className="w-4 h-4 text-blue-600" /> Buyer</h4>
+                  <div className="space-y-2.5 text-sm">
+                    <div className="bg-blue-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600 mb-0.5">Full Name</p><p className="font-semibold text-gray-900">{selectedTxn.buyer?.full_name || '—'}</p></div>
+                    <div className="bg-blue-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600 mb-0.5">Email</p><p className="font-semibold text-gray-900">{selectedTxn.buyer?.email || '—'}</p></div>
+                    <div className="bg-blue-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600 mb-0.5">Phone</p><p className="font-semibold text-gray-900">{selectedTxn.buyer?.phone || '—'}</p></div>
                   </div>
                 </div>
-                <div className="border border-gray-100 rounded-xl p-4">
-                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2"><Store className="w-4 h-4 text-emerald-600" /> Seller</h4>
-                  <div className="space-y-2 text-sm">
-                    <div><p className="text-xs text-gray-500">Full Name</p><p className="font-semibold text-gray-900">{selectedTxn.seller?.full_name || '—'}</p></div>
-                    <div><p className="text-xs text-gray-500">Email</p><p className="font-semibold text-gray-900">{selectedTxn.seller?.email || '—'}</p></div>
-                    <div><p className="text-xs text-gray-500">Phone</p><p className="font-semibold text-gray-900">{selectedTxn.seller?.phone || '—'}</p></div>
-                    <div><p className="text-xs text-gray-500">Branch</p><p className="font-semibold text-gray-900">{selectedTxn.seller?.branch || '—'}</p></div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-amber-500 p-4 hover:shadow-md transition">
+                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2"><Store className="w-4 h-4 text-amber-600" /> Seller</h4>
+                  <div className="space-y-2.5 text-sm">
+                    <div className="bg-amber-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 mb-0.5">Full Name</p><p className="font-semibold text-gray-900">{selectedTxn.seller?.full_name || '—'}</p></div>
+                    <div className="bg-amber-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 mb-0.5">Email</p><p className="font-semibold text-gray-900">{selectedTxn.seller?.email || '—'}</p></div>
+                    <div className="bg-amber-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 mb-0.5">Phone</p><p className="font-semibold text-gray-900">{selectedTxn.seller?.phone || '—'}</p></div>
+                    <div className="bg-amber-50/50 rounded-lg p-2.5"><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 mb-0.5">Branch</p><p className="font-semibold text-gray-900">{selectedTxn.seller?.branch || '—'}</p></div>
                   </div>
                 </div>
               </div>
 
               {selectedTxn.tx_hash && (
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                  <p className="text-xs text-gray-500 mb-1">Blockchain Hash</p>
-                  <p className="font-mono text-xs text-gray-700 break-all">{selectedTxn.tx_hash}</p>
+                <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 text-white shadow-md">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Link2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-400">Blockchain Hash</p>
+                  </div>
+                  <p className="font-mono text-xs text-slate-300 break-all">{selectedTxn.tx_hash}</p>
                 </div>
               )}
             </div>

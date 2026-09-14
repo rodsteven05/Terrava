@@ -1,7 +1,7 @@
 const { ethers } = require('hardhat');
 
 async function main() {
-  console.log('Deploying LandChainPayment contract to Sepolia...');
+  console.log('Deploying TerravaPayment contract to Sepolia...');
 
   const [deployer] = await ethers.getSigners();
   console.log('Deploying with account:', deployer.address);
@@ -9,8 +9,8 @@ async function main() {
   const balance = await ethers.provider.getBalance(deployer.address);
   console.log('Account balance:', ethers.formatEther(balance), 'ETH');
 
-  const LandChainPayment = await ethers.getContractFactory('LandChainPayment');
-  const contract = await LandChainPayment.deploy();
+  const TerravaPayment = await ethers.getContractFactory('TerravaPayment');
+  const contract = await TerravaPayment.deploy();
   await contract.waitForDeployment();
 
   const address = await contract.getAddress();

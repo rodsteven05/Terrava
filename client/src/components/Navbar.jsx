@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
-import { MapPin, LogOut, User, Menu, X, ChevronDown, Home, BarChart3, Building2, Bell, Shield } from 'lucide-react'
+import { MapPin, LogOut, User, Menu, X, ChevronDown, LandPlot, BarChart3, Building2, Bell, Shield, Banknote, Info } from 'lucide-react'
 import { useNotifications } from '../context/NotificationContext.jsx'
+import Avatar from '../components/Avatar.jsx'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
@@ -41,10 +42,6 @@ export default function Navbar() {
     { label: 'Branches', href: '#branches' },
     { label: 'Contact', href: '#contact' },
   ]
-
-  const initials = user?.full_name
-    ? user.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
-    : 'U'
 
   const scrollTo = (id) => {
     const el = document.getElementById(id.replace('#', ''))
@@ -90,7 +87,9 @@ export default function Navbar() {
                   >
                     <Bell className="w-5 h-5" />
                     {unreadCount > 0 && (
-                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white" />
+                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full ring-2 ring-white">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
                     )}
                   </button>
 
@@ -120,13 +119,38 @@ export default function Navbar() {
                               n.is_read ? 'bg-white' : 'bg-brand-50/40'
                             }`}
                           >
-                            <p className={`text-sm ${n.is_read ? 'text-gray-700 font-medium' : 'text-gray-900 font-bold'}`}>
-                              {n.title}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
-                            <p className="text-[10px] text-gray-400 mt-1">
-                              {new Date(n.created_at).toLocaleString()}
-                            </p>
+                            <div className="flex items-start gap-3">
+                              {(() => {
+                                const { Icon, bg } = n.type === 'transaction'
+                                  ? { Icon: Banknote, bg: 'bg-emerald-100 text-emerald-600' }
+                                  : n.type === 'listing'
+                                    ? { Icon: LandPlot, bg: 'bg-blue-100 text-blue-600' }
+                                    : { Icon: Info, bg: 'bg-gray-100 text-gray-500' }
+                                return (
+                                  <div className={`mt-0.5 p-1.5 rounded-lg flex-shrink-0 ${bg}`}>
+                                    <Icon className="w-4 h-4" />
+                                  </div>
+                                )
+                              })()}
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm ${n.is_read ? 'text-gray-500 font-normal' : 'text-gray-900 font-bold'}`}>
+                                  {n.title}
+                                </p>
+                                <p className={`text-xs mt-0.5 line-clamp-2 ${n.is_read ? 'text-gray-400' : 'text-gray-700 font-medium'}`}>
+                                  {n.message}
+                                </p>
+                                <p className={`text-[10px] mt-1 ${n.is_read ? 'text-gray-300' : 'text-gray-500'}`}>
+                                  {(() => {
+                                    const raw = n.created_at || n.createdAt
+                                    if (!raw || isNaN(new Date(raw).getTime())) return '—'
+                                    return new Date(raw).toLocaleString('en-PH', {
+                                      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+                                      hour: '2-digit', minute: '2-digit'
+                                    })
+                                  })()}
+                                </p>
+                              </div>
+                            </div>
                           </button>
                         ))
                       )}
@@ -139,9 +163,7 @@ export default function Navbar() {
                     onClick={() => setDropdownOpen(!dropdownOpen)}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-brand-50 transition group"
                   >
-                  <div className="w-8 h-8 bg-brand-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                    {initials}
-                  </div>
+                  <Avatar url={user?.photo_url} name={user?.full_name} sizeClass="w-8 h-8" textClass="text-xs" />
                   <span className="text-sm font-semibold text-gray-800 max-w-[120px] truncate">{user.full_name}</span>
                   <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -223,9 +245,7 @@ export default function Navbar() {
           {user ? (
             <>
               <div className="flex items-center gap-3 px-3 py-3 border-b border-gray-100 mb-2">
-                <div className="w-9 h-9 bg-brand-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                  {initials}
-                </div>
+                <Avatar url={user?.photo_url} name={user?.full_name} sizeClass="w-9 h-9" textClass="text-sm" />
                 <div>
                   <p className="text-sm font-bold text-gray-900">{user.full_name}</p>
                   <p className="text-xs text-gray-500 capitalize">{user.role}</p>

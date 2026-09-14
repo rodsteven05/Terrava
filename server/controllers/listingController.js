@@ -1,5 +1,7 @@
 const db = require('../models');
+const { Op } = require('sequelize');
 const { createNotification } = require('./notificationController');
+const { buildPhotoGeotags } = require('../utils/exif');
 
 const getUploadUrls = (files) => files.map((f) => `/uploads/${f.filename}`);
 
@@ -37,7 +39,7 @@ exports.create = async (req, res) => {
       zoning_classification, land_title_status, total_contract_price, reservation_fee,
       minimum_down_payment_pct, cash_term_enabled, cash_term_discount_pct,
       in_house_financing_enabled, in_house_max_term_years, in_house_interest_rate_pct,
-      bank_government_loan_enabled, terrain_topography, lot_configuration,
+      bank_government_loan_enabled, penalty_rate_pct, monthly_payment_amount, terrain_topography, lot_configuration,
       lot_block_number, extra_data
     } = req.body;
     const seller = await db.User.findByPk(req.user.id, { attributes: ['id', 'branch'] });
@@ -60,6 +62,8 @@ exports.create = async (req, res) => {
       return res.status(400).json({ error: 'Title, contract price, area, and location are required.' });
     }
 
+    const photoGeotags = req.files ? await buildPhotoGeotags(req.files) : [];
+
     const listing = await db.LandListing.create({
       seller_id: req.user.id,
       title: title.trim(),
@@ -70,6 +74,7 @@ exports.create = async (req, res) => {
       branch: seller?.branch || req.body.branch || 'Main Tagum',
       polygon_geojson: parsedPolygon,
       photos: req.files ? getUploadUrls(req.files) : [],
+      photo_geotags: photoGeotags,
       zoning_classification: valueOrCurrent(null, zoning_classification, parsedExtras.zoning_classification),
       land_title_status: valueOrCurrent(null, land_title_status, parsedExtras.land_title_status),
       total_contract_price: valueOrCurrent(null, total_contract_price, parsedExtras.total_contract_price),
@@ -81,6 +86,8 @@ exports.create = async (req, res) => {
       in_house_max_term_years: valueOrCurrent(null, in_house_max_term_years, parsedExtras.in_house_max_term_years),
       in_house_interest_rate_pct: valueOrCurrent(null, in_house_interest_rate_pct, parsedExtras.in_house_interest_rate_pct),
       bank_government_loan_enabled: bank_government_loan_enabled === 'true' || bank_government_loan_enabled === true || parsedExtras.bank_government_loan_enabled || false,
+      penalty_rate_pct: valueOrCurrent(null, penalty_rate_pct, parsedExtras.penalty_rate_pct),
+      monthly_payment_amount: valueOrCurrent(null, monthly_payment_amount, parsedExtras.monthly_payment_amount),
       terrain_topography: valueOrCurrent(null, terrain_topography, parsedExtras.terrain_topography),
       lot_configuration: valueOrCurrent(null, lot_configuration, parsedExtras.lot_configuration),
       utilities: Object.keys(parsedUtilities).length > 0 ? parsedUtilities : {},
@@ -121,8 +128,9 @@ exports.getAll = async (req, res) => {
     const listings = await db.LandListing.findAll({
       where,
       include: [
-        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'branch'] },
-        { model: db.User, as: 'assignedBuyer', attributes: ['id', 'full_name', 'email', 'phone'] }
+        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'branch', 'photo_url'] },
+        { model: db.User, as: 'assignedBuyer', attributes: ['id', 'full_name', 'email', 'phone', 'photo_url'] },
+        { model: db.InstallmentAccount, as: 'installmentAccounts', required: false, where: { status: { [Op.notIn]: ['defaulted'] } } }
       ],
       order: [['created_at', 'DESC']]
     });
@@ -137,9 +145,10 @@ exports.getAssigned = async (req, res) => {
     const listings = await db.LandListing.findAll({
       where: { assigned_buyer_id: req.user.id, archived: false },
       include: [
-        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone'] },
-        { model: db.User, as: 'assignedBuyer', attributes: ['id', 'full_name', 'email', 'phone'] },
-        { model: db.Transaction, as: 'transactions', attributes: ['id', 'amount', 'status', 'payment_method', 'reference_number', 'created_at'] }
+        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'photo_url'] },
+        { model: db.User, as: 'assignedBuyer', attributes: ['id', 'full_name', 'email', 'phone', 'photo_url'] },
+        { model: db.Transaction, as: 'transactions', attributes: ['id', 'amount', 'status', 'payment_method', 'reference_number', 'created_at'] },
+        { model: db.InstallmentAccount, as: 'installmentAccounts', required: false, where: { status: { [Op.notIn]: ['defaulted'] } } }
       ],
       order: [['created_at', 'DESC']]
     });
@@ -186,8 +195,8 @@ exports.getById = async (req, res) => {
   try {
     const listing = await db.LandListing.findByPk(req.params.id, {
       include: [
-        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'branch'] },
-        { model: db.User, as: 'assignedBuyer', attributes: ['id', 'full_name', 'email', 'phone', 'phone2', 'birthdate', 'address'] }
+        { model: db.User, as: 'seller', attributes: ['id', 'full_name', 'email', 'phone', 'branch', 'photo_url'] },
+        { model: db.User, as: 'assignedBuyer', attributes: ['id', 'full_name', 'email', 'phone', 'phone2', 'birthdate', 'address', 'photo_url'] }
       ]
     });
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
@@ -217,7 +226,7 @@ exports.update = async (req, res) => {
       zoning_classification, land_title_status, total_contract_price, reservation_fee,
       minimum_down_payment_pct, cash_term_enabled, cash_term_discount_pct,
       in_house_financing_enabled, in_house_max_term_years, in_house_interest_rate_pct,
-      bank_government_loan_enabled, terrain_topography, lot_configuration,
+      bank_government_loan_enabled, penalty_rate_pct, monthly_payment_amount, terrain_topography, lot_configuration,
       lot_block_number, extra_data
     } = req.body;
     const seller = await db.User.findByPk(req.user.id, { attributes: ['id', 'branch'] });
@@ -243,6 +252,8 @@ exports.update = async (req, res) => {
       in_house_max_term_years: valueOrCurrent(listing.in_house_max_term_years, in_house_max_term_years, parsedExtras.in_house_max_term_years),
       in_house_interest_rate_pct: valueOrCurrent(listing.in_house_interest_rate_pct, in_house_interest_rate_pct, parsedExtras.in_house_interest_rate_pct),
       bank_government_loan_enabled: bank_government_loan_enabled !== undefined ? bank_government_loan_enabled === 'true' || bank_government_loan_enabled === true : valueOrCurrent(listing.bank_government_loan_enabled, parsedExtras.bank_government_loan_enabled),
+      penalty_rate_pct: valueOrCurrent(listing.penalty_rate_pct, penalty_rate_pct, parsedExtras.penalty_rate_pct),
+      monthly_payment_amount: valueOrCurrent(listing.monthly_payment_amount, monthly_payment_amount, parsedExtras.monthly_payment_amount),
       terrain_topography: valueOrCurrent(listing.terrain_topography, terrain_topography, parsedExtras.terrain_topography),
       lot_configuration: valueOrCurrent(listing.lot_configuration, lot_configuration, parsedExtras.lot_configuration),
       utilities: Object.keys(parsedUtilities).length > 0 ? parsedUtilities : listing.utilities,
@@ -256,14 +267,22 @@ exports.update = async (req, res) => {
 
     // Merge existing photos with new uploads and removals
     let photos = listing.photos || [];
+    let photoGeotags = listing.photo_geotags || [];
     if (req.body.removed_existing_photos) {
       const removed = parseOptionalJson(req.body.removed_existing_photos, 'removed_existing_photos') || [];
       photos = photos.filter((url) => !removed.includes(url));
+      photoGeotags = photoGeotags.filter((tag) => !removed.includes(tag.url));
     }
     if (req.files && req.files.length > 0) {
-      photos = [...photos, ...getUploadUrls(req.files)];
+      const newPhotoUrls = getUploadUrls(req.files);
+      photos = [...photos, ...newPhotoUrls];
+      const newGeotags = await buildPhotoGeotags(req.files);
+      photoGeotags = [...photoGeotags, ...newGeotags];
     }
-    if (photos.length > 0) updates.photos = photos;
+    if (photos.length > 0) {
+      updates.photos = photos;
+      updates.photo_geotags = photoGeotags;
+    }
 
     await listing.update(updates);
 

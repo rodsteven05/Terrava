@@ -103,6 +103,7 @@ export default function EditListing() {
           isEdit
           initialData={listing}
           existingPhotos={listing.photos || []}
+          existingPhotoGeotags={listing.photo_geotags || []}
           initialBranch={user?.branch || listing?.branch || ''}
           onSubmit={handleSubmit}
         />

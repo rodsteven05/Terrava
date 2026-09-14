@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import useAutoRefresh from '../hooks/useAutoRefresh.js'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import api from '../api/api.js'
@@ -6,7 +7,8 @@ import Spinner from '../components/Spinner.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import AssignBuyerModal from '../components/AssignBuyerModal.jsx'
 import RecordPaymentModal from '../components/RecordPaymentModal.jsx'
-import { FileText, CreditCard, UserCheck, UserX, Eye, PlusCircle, Pencil, Home, BookmarkCheck, Receipt, ShieldCheck, Filter, ChevronDown, Search, X, AlertTriangle } from 'lucide-react'
+import Avatar from '../components/Avatar.jsx'
+import { FileText, CreditCard, UserCheck, UserX, Eye, PlusCircle, Pencil, Home, BookmarkCheck, Receipt, ShieldCheck, Filter, ChevronDown, Search, X, AlertTriangle, Wallet, Clock, AlertCircle } from 'lucide-react'
 
 const statusColors = {
   available: 'bg-green-100 text-green-700',
@@ -57,6 +59,7 @@ export default function Dashboard() {
   const { user } = useAuth()
   const [listings, setListings] = useState([])
   const [transactions, setTransactions] = useState([])
+  const [installments, setInstallments] = useState([])
   const [loading, setLoading] = useState(true)
   const [assignTarget, setAssignTarget] = useState(null)
   const [recordTarget, setRecordTarget] = useState(null)
@@ -65,10 +68,22 @@ export default function Dashboard() {
   const [verificationFilter, setVerificationFilter] = useState('all')
   const [search, setSearch] = useState('')
 
-  const fetchListings = () =>
+  const fetchListings = useCallback(() =>
     api.get('/listings?all=true').then((res) =>
       setListings(res.data.filter((l) => l.seller_id === user.id))
-    )
+    ), [user])
+
+  const fetchTransactions = useCallback(() =>
+    api.get('/transactions/mine').then((res) => setTransactions(res.data)), [])
+
+  const fetchInstallments = useCallback(() =>
+    api.get('/installments/mine').then((res) => setInstallments(res.data)).catch(() => {}), [])
+
+  const fetchAll = useCallback(() => {
+    const fetches = [fetchTransactions(), fetchInstallments()]
+    if (user?.role === 'seller') fetches.push(fetchListings())
+    Promise.all(fetches).finally(() => setLoading(false))
+  }, [fetchListings, fetchTransactions, fetchInstallments, user])
 
   const openUnassignModal = (listing) => {
     if (hasPayments(listing.id)) {
@@ -97,14 +112,7 @@ export default function Dashboard() {
 
   const hasPayments = (listingId) => transactions.some((t) => t.listing_id === listingId)
 
-  useEffect(() => {
-    setLoading(true)
-    const fetches = [api.get('/transactions/mine').then((res) => setTransactions(res.data))]
-    if (user?.role === 'seller') {
-      fetches.push(fetchListings())
-    }
-    Promise.all(fetches).finally(() => setLoading(false))
-  }, [user])
+  useAutoRefresh(fetchAll, [fetchAll], 30000)
 
   const q = search.toLowerCase()
   const filteredListings = listings.filter((l) => {
@@ -359,7 +367,12 @@ export default function Dashboard() {
                           ? new Date(t.created_at || t.createdAt).toLocaleString()
                           : '—'
                       }</td>
-                      <td className="px-5 py-4 text-gray-600">{t.buyer?.full_name || '—'}</td>
+                      <td className="px-5 py-4 text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <Avatar url={t.buyer?.photo_url} name={t.buyer?.full_name} sizeClass="w-7 h-7" textClass="text-[10px]" />
+                          <span>{t.buyer?.full_name || '—'}</span>
+                        </div>
+                      </td>
                       <td className="px-5 py-4">
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-full capitalize ${txStatusColors[t.status] || 'bg-gray-100 text-gray-600'}`}>
                           {t.status}
@@ -373,6 +386,53 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+
+      {/* Installment Accounts */}
+      {installments.length > 0 && (
+        <section>
+          <SectionHeader icon={Wallet} title="Installment Accounts" />
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-brand-50 border-b border-brand-100">
+                  <tr>
+                    <th className="px-5 py-3.5 font-bold text-gray-700">Property</th>
+                    <th className="px-5 py-3.5 font-bold text-gray-700">Buyer</th>
+                    <th className="px-5 py-3.5 font-bold text-gray-700">Monthly</th>
+                    <th className="px-5 py-3.5 font-bold text-gray-700">Next Due</th>
+                    <th className="px-5 py-3.5 font-bold text-gray-700">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {installments.map((a) => {
+                    const statusColors = {
+                      active: 'bg-emerald-100 text-emerald-700',
+                      grace_period: 'bg-amber-100 text-amber-700',
+                      overdue: 'bg-orange-100 text-orange-700',
+                      delinquent: 'bg-red-100 text-red-700',
+                      defaulted: 'bg-gray-100 text-gray-700',
+                      paid_off: 'bg-blue-100 text-blue-700'
+                    }
+                    return (
+                      <tr key={a.id} className="hover:bg-gray-50 transition">
+                        <td className="px-5 py-4 font-medium text-gray-900">{a.listing?.title || '—'}</td>
+                        <td className="px-5 py-4 text-gray-600">{a.buyer?.full_name || '—'}</td>
+                        <td className="px-5 py-4 font-bold text-brand-600">₱{Number(a.monthly_payment_amount || 0).toLocaleString()}</td>
+                        <td className="px-5 py-4 text-gray-600">{a.next_due_date ? new Date(a.next_due_date).toLocaleDateString() : '—'}</td>
+                        <td className="px-5 py-4">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full capitalize ${statusColors[a.status] || 'bg-gray-100 text-gray-600'}`}>
+                            {a.status?.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Assign Buyer Modal */}
       {assignTarget && (
@@ -390,8 +450,7 @@ export default function Dashboard() {
           transactions={transactions}
           onClose={() => setRecordTarget(null)}
           onRecorded={() => {
-            fetchListings()
-            api.get('/transactions/mine').then((res) => setTransactions(res.data))
+            fetchAll()
           }}
         />
       )}

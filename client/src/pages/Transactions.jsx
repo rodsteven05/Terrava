@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import useAutoRefresh from '../hooks/useAutoRefresh.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import api from '../api/api.js'
 import Spinner from '../components/Spinner.jsx'
 import { SkeletonTable } from '../components/Skeleton.jsx'
 import EmptyState from '../components/EmptyState.jsx'
+import Avatar from '../components/Avatar.jsx'
 import {
   ShieldCheck, Link2, ExternalLink, Search, X, CreditCard, Receipt, TrendingUp, Clock, CheckCircle, XCircle, Home, User,
   Eye, MapPin, Maximize, Phone, Mail, Landmark, Calendar, Hash, FileText, UserCheck, Building2, Tag, Banknote, ArrowRight
@@ -37,8 +39,7 @@ export default function Transactions() {
     })
   }
 
-  useEffect(() => {
-    setLoading(true)
+  const fetchAll = useCallback(() => {
     const fetchTransactions = user?.role === 'admin'
       ? api.get('/transactions').then((res) => setTransactions(res.data))
       : api.get('/transactions/mine').then((res) => setTransactions(res.data))
@@ -48,6 +49,8 @@ export default function Transactions() {
     }
     Promise.all(fetches).finally(() => setLoading(false))
   }, [user])
+
+  useAutoRefresh(fetchAll, [fetchAll], 30000)
 
   const q = search.toLowerCase()
   const filteredTransactions = transactions.filter((t) => {
@@ -212,13 +215,13 @@ export default function Transactions() {
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-2">
-                              <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                              <Avatar url={t.buyer?.photo_url} name={t.buyer?.full_name} sizeClass="w-7 h-7" textClass="text-[10px]" />
                               <span className="text-sm text-gray-600">{t.buyer?.full_name || '—'}</span>
                             </div>
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-2">
-                              <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                              <Avatar url={t.seller?.photo_url} name={t.seller?.full_name} sizeClass="w-7 h-7" textClass="text-[10px]" />
                               <span className="text-sm text-gray-600">{t.seller?.full_name || '—'}</span>
                             </div>
                           </td>
@@ -432,7 +435,10 @@ export default function Transactions() {
                         </div>
                         <p className="text-xs font-bold text-brand-800 uppercase tracking-wider">{label}</p>
                       </div>
-                      <p className="text-sm font-bold text-gray-900">{u?.full_name || '—'}</p>
+                      <div className="flex items-center gap-3">
+                        <Avatar url={u?.photo_url} name={u?.full_name} sizeClass="w-10 h-10" textClass="text-xs" />
+                        <p className="text-sm font-bold text-gray-900">{u?.full_name || '—'}</p>
+                      </div>
                       {u?.email && (
                         <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
                           <Mail className="w-3 h-3" /> {u.email}

@@ -34,6 +34,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.JSONB,
       defaultValue: []
     },
+    photo_geotags: {
+      type: DataTypes.JSONB,
+      defaultValue: []
+    },
     is_verified: {
       type: DataTypes.BOOLEAN,
       defaultValue: false
@@ -57,6 +61,14 @@ module.exports = (sequelize, DataTypes) => {
     in_house_max_term_years: DataTypes.INTEGER,
     in_house_interest_rate_pct: DataTypes.DECIMAL(5, 2),
     bank_government_loan_enabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    penalty_rate_pct: {
+      type: DataTypes.DECIMAL(5, 2),
+      defaultValue: 5.00
+    },
+    monthly_payment_amount: {
+      type: DataTypes.DECIMAL(18, 2),
+      allowNull: true
+    },
     terrain_topography: DataTypes.STRING(100),
     lot_configuration: DataTypes.STRING(100),
     utilities: { type: DataTypes.JSONB, defaultValue: {} },
@@ -73,6 +85,7 @@ module.exports = (sequelize, DataTypes) => {
     LandListing.hasMany(models.Inquiry, { foreignKey: 'listing_id', as: 'inquiries' });
     LandListing.hasMany(models.Transaction, { foreignKey: 'listing_id', as: 'transactions' });
     LandListing.hasMany(models.Favorite, { foreignKey: 'listing_id', as: 'favorites' });
+    LandListing.hasMany(models.InstallmentAccount, { foreignKey: 'listing_id', as: 'installmentAccounts' });
   };
 
   return LandListing;
