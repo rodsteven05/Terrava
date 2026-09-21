@@ -13,6 +13,7 @@ import CreateListingForm from '../../components/CreateListingForm.jsx'
 import Avatar from '../../components/Avatar.jsx'
 import PesoIcon from '../../components/PesoIcon.jsx'
 import AdminSettingsModal from '../../components/AdminSettingsModal.jsx'
+import EditUserProfileModal from '../../components/EditUserProfileModal.jsx'
 import {
   LayoutDashboard, Users, List, CreditCard, Link2, Map, Globe, ShieldCheck,
   Shield, Lock, Search, Trash2, Edit3, CheckCircle2, X, Banknote, LandPlot, Info,
@@ -101,6 +102,7 @@ export default function AdminDashboard() {
   const blocksPerPage = 10
   const [roleEditUser, setRoleEditUser] = useState(null)
   const [roleEditValue, setRoleEditValue] = useState('')
+  const [editProfileUser, setEditProfileUser] = useState(null)
   const [viewUser, setViewUser] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deletingUser, setDeletingUser] = useState(false)
@@ -549,8 +551,11 @@ export default function AdminDashboard() {
   }
 
   const handleUpdateSeller = (user) => {
-    setRoleEditUser(user)
-    setRoleEditValue(user.role)
+    setEditProfileUser(user)
+  }
+
+  const handleProfileSaved = (updatedUser) => {
+    setUsers((prev) => prev.map((u) => u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
   }
 
   const handleSaveRole = async () => {
@@ -1320,12 +1325,12 @@ export default function AdminDashboard() {
                           >
                             <Eye className="w-3.5 h-3.5" /> View
                           </button>
-                          {u.role === 'seller' && (
+                          {(u.role === 'seller' || u.role === 'buyer') && (
                             <button
                               onClick={() => handleUpdateSeller(u)}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
                             >
-                              <Edit3 className="w-3.5 h-3.5" /> Update
+                              <Edit3 className="w-3.5 h-3.5" /> Edit Profile
                             </button>
                           )}
                           {u.role === 'buyer' && (
@@ -2805,6 +2810,15 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Edit profile modal */}
+      {editProfileUser && (
+        <EditUserProfileModal
+          user={editProfileUser}
+          onClose={() => setEditProfileUser(null)}
+          onSaved={handleProfileSaved}
+        />
+      )}
+
       {/* User details modal */}
       {viewUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -2823,7 +2837,15 @@ export default function AdminDashboard() {
                   <p className="text-xs text-gray-500 capitalize">{viewUser.role || 'buyer'} profile details</p>
                 </div>
               </div>
-              <button onClick={() => setViewUser(null)} className="p-2 rounded-xl hover:bg-gray-100 transition"><X className="w-5 h-5 text-gray-500" /></button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setViewUser(null); setEditProfileUser(viewUser) }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+                >
+                  <Edit3 className="w-3.5 h-3.5" /> Edit Profile
+                </button>
+                <button onClick={() => setViewUser(null)} className="p-2 rounded-xl hover:bg-gray-100 transition"><X className="w-5 h-5 text-gray-500" /></button>
+              </div>
             </div>
 
             <div className="space-y-5">

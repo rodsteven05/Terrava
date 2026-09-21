@@ -11,6 +11,45 @@ const validatePassword = (password) => {
   return '';
 };
 
+const computeAge = (birthdate) => {
+  if (!birthdate) return null;
+  const today = new Date();
+  const dob = new Date(birthdate);
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+};
+
+const formatUser = (user) => ({
+  id: user.id,
+  email: user.email,
+  full_name: user.full_name,
+  first_name: user.first_name,
+  middle_name: user.middle_name,
+  last_name: user.last_name,
+  extension_name: user.extension_name,
+  role: user.role,
+  phone: user.phone,
+  phone2: user.phone2,
+  birthdate: user.birthdate,
+  age: computeAge(user.birthdate),
+  address: user.address,
+  branch: user.branch,
+  occupation: user.occupation,
+  spouse_first_name: user.spouse_first_name,
+  spouse_middle_name: user.spouse_middle_name,
+  spouse_last_name: user.spouse_last_name,
+  spouse_extension_name: user.spouse_extension_name,
+  spouse_email: user.spouse_email,
+  spouse_phone: user.spouse_phone,
+  spouse_occupation: user.spouse_occupation,
+  photo_url: user.photo_url,
+  archived: user.archived,
+  created_at: user.created_at,
+  updated_at: user.updated_at
+});
+
 exports.createSeller = async (req, res) => {
   try {
     const {
@@ -57,12 +96,51 @@ exports.createSeller = async (req, res) => {
       spouse_occupation: spouse_occupation?.trim() || null
     });
 
-    res.status(201).json({
-      user: {
-        id: seller.id, email: seller.email, full_name: seller.full_name, role: seller.role,
-        phone: seller.phone, branch: seller.branch, created_at: seller.created_at
-      }
+    res.status(201).json({ user: formatUser(seller) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.updateUserProfile = async (req, res) => {
+  try {
+    const user = await db.User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin' && req.user.id !== user.id) {
+      return res.status(403).json({ error: 'Only the admin can update their own profile.' });
+    }
+
+    const {
+      first_name, middle_name, last_name, extension_name,
+      phone, phone2, birthdate, address, occupation, branch,
+      spouse_first_name, spouse_middle_name, spouse_last_name, spouse_extension_name,
+      spouse_email, spouse_phone, spouse_occupation
+    } = req.body;
+
+    const full_name = [first_name, middle_name, last_name, extension_name].filter(Boolean).join(' ') || user.full_name;
+
+    await user.update({
+      full_name,
+      first_name: first_name?.trim() || user.first_name,
+      middle_name: middle_name?.trim() || null,
+      last_name: last_name?.trim() || user.last_name,
+      extension_name: extension_name?.trim() || null,
+      phone: phone?.trim() || user.phone,
+      phone2: phone2?.trim() || null,
+      birthdate: birthdate || user.birthdate,
+      address: address?.trim() || user.address,
+      occupation: occupation?.trim() || user.occupation,
+      branch: branch || user.branch,
+      spouse_first_name: spouse_first_name?.trim() || null,
+      spouse_middle_name: spouse_middle_name?.trim() || null,
+      spouse_last_name: spouse_last_name?.trim() || null,
+      spouse_extension_name: spouse_extension_name?.trim() || null,
+      spouse_email: spouse_email?.trim().toLowerCase() || null,
+      spouse_phone: spouse_phone?.trim() || null,
+      spouse_occupation: spouse_occupation?.trim() || null
     });
+
+    res.json({ user: formatUser(user) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
